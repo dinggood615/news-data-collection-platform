@@ -38,6 +38,12 @@ def _term_list(value) -> list[str]:
     return [str(term).strip().casefold() for term in raw_terms if str(term).strip()]
 
 
+def _topic_text(value) -> str:
+    if isinstance(value, (list, tuple, set)):
+        return " · ".join(str(topic) for topic in value if str(topic).strip())
+    return " · ".join(str(value or "").split(","))
+
+
 def _topics(title: str, summary: str, rules: list[dict]) -> list[str]:
     text = f"{title} {summary}".casefold()
     matched = []
@@ -87,7 +93,7 @@ def translate(text: str) -> str:
 def _wecom_markdown(items: list[dict]) -> str:
     sections = [f"# 国际新闻快报 · {datetime.now().astimezone():%Y-%m-%d %H:%M}"]
     for item in items:
-        topics = " · ".join(item["topics"].split(","))
+        topics = _topic_text(item["topics"])
         title = item["translated_title"] or item["title"]
         summary = (item["translated_summary"] or item["summary"]).replace("\n", " ")[:180]
         sections.append(f"**【{topics}】**\n**{title[:100]}**\n> {summary}\n来源：{item['source']} · [阅读原文]({item['url']})")
