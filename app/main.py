@@ -78,6 +78,12 @@ def healthz():
     except Exception: return JSONResponse({"status": "error"}, 503)
 
 
+@app.get("/_internal/auth-check", status_code=204)
+def auth_check():
+    """Nginx auth_request target; authentication is enforced by the middleware."""
+    return None
+
+
 def run_news():
     with connect() as db: run_id = db.execute("INSERT INTO runs(started_at,status) VALUES(?,?)", (now_text(), "running")).lastrowid
     try: collected, new, message = collect_news(); status = "success"
