@@ -1,52 +1,98 @@
 from __future__ import annotations
 
 import hashlib
-import os
-import smtplib
-import ssl
+import json
+import re
 from datetime import datetime
-from email.message import EmailMessage
+from html import unescape
+from urllib.request import Request, urlopen
 
-from .connectors.custom import collect_custom_site
-from .database import connect, setting
+import feedparser
+
+from .database import connect, now_text, setting
 
 
-def collect_enabled_sites(target_date: str) -> tuple[int, int, str]:
+def _plain(value: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", unescape(value or ""))).strip()
+
+
+def _topics(title: str, summary: str, rules: list[dict]) -> list[str]:
+    text = f"{title} {summary}".casefold()
+    matched = []
+    for rule in rules:
+        terms = [term.strip().casefold() for term in rule["terms"].replace("，", ",").split(",")]
+        if any(term and term in text for term in terms): matched.append(rule["topic"])
+    return matched
+
+
+def translate(text: str) -> str:
+    """Use a local LibreTranslate-compatible endpoint; source text is retained on failure."""
+    if not text or setting("translation_mode", "argos") == "off": return text
+    endpoint = setting("translation_endpoint", "http://127.0.0.1:5000/translate")
+    body = json.dumps({"q": text[:2500], "source": "auto", "target": "zh", "format": "text"}).encode()
+    try:
+        request = Request(endpoint, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        with urlopen(request, timeout=20) as response:
+            return str(json.loads(response.read().decode())["translatedText"]).strip() or text
+    except Exception:
+        return text
+
+
+def _wecom_markdown(items: list[dict]) -> str:
+    sections = [f"# 国际新闻快报 · {datetime.now().astimezone():%Y-%m-%d %H:%M}"]
+    for item in items:
+        topics = " · ".join(item["topics"].split(","))
+        title = item["translated_title"] or item["title"]
+        summary = (item["translated_summary"] or item["summary"]).replace("\n", " ")[:180]
+        sections.append(f"**【{topics}】**\n**{title[:100]}**\n> {summary}\n来源：{item['source']} · [阅读原文]({item['url']})")
+    return "\n\n---\n\n".join(sections)
+
+
+def send_wecom(items: list[dict]) -> str:
+    webhook = setting("wecom_webhook", secret=True)
+    if not webhook or not items: return "企业微信未配置或没有新增新闻"
+    # WeCom markdown payloads have a practical size limit; split conservatively.
+    chunks, current = [], []
+    for item in items:
+        candidate = _wecom_markdown(current + [item])
+        if len(candidate.encode()) > 3500 and current:
+            chunks.append(current); current = [item]
+        else: current.append(item)
+    if current: chunks.append(current)
+    for chunk in chunks:
+        body = json.dumps({"msgtype": "markdown", "markdown": {"content": _wecom_markdown(chunk)}}).encode()
+        request = Request(webhook, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        with urlopen(request, timeout=20) as response:
+            if json.loads(response.read().decode()).get("errcode") != 0: raise RuntimeError("企业微信机器人拒绝消息")
+    return f"企业微信已推送 {len(items)} 条新闻"
+
+
+def collect_news() -> tuple[int, int, str]:
     with connect() as db:
-        keywords = [row["term"] for row in db.execute("SELECT term FROM keywords WHERE enabled=1")]
-        custom_sites = [dict(row) for row in db.execute("SELECT * FROM custom_sites WHERE enabled=1")]
-    items, notices = [], []
-    for site in custom_sites:
-        batch, warning = collect_custom_site(site, target_date, keywords)
-        items.extend(batch)
-        if warning:
-            notices.append(warning)
+        sources = [dict(row) for row in db.execute("SELECT * FROM news_sources WHERE enabled=1")]
+        rules = [dict(row) for row in db.execute("SELECT * FROM topic_terms WHERE enabled=1")]
+    collected, warnings, accepted = 0, [], []
+    for source in sources:
+        try:
+            parsed = feedparser.parse(source["url"], agent="NewsCollectionPlatform/1.0 (+public RSS)")
+            if parsed.bozo and not parsed.entries: raise RuntimeError("RSS 无法解析")
+            for entry in parsed.entries[:60]:
+                title, summary, url = _plain(entry.get("title", "")), _plain(entry.get("summary", "")), entry.get("link", "")
+                if not title or not url: continue
+                topics = _topics(title, summary, rules)
+                if not topics: continue
+                collected += 1
+                accepted.append({"source": source["name"], "title": title, "summary": summary, "url": url,
+                                 "published_at": entry.get("published", entry.get("updated", "")), "topics": topics})
+        except Exception as exc: warnings.append(f"{source['name']}：{type(exc).__name__}")
     new_items = []
     with connect() as db:
-        for item in items:
-            fingerprint = hashlib.sha256(f"{item['source']}\n{item['title']}\n{item['url']}\n{item['published_date']}".encode()).hexdigest()
-            cursor = db.execute("""INSERT OR IGNORE INTO tenders(fingerprint,source,title,url,published_date,notice_type,matched_terms,first_seen_at)
-                VALUES(?,?,?,?,?,?,?,?)""", (fingerprint, item["source"], item["title"], item["url"], item["published_date"], item["notice_type"], ",".join(item["matched_terms"]), datetime.now().astimezone().isoformat(timespec="seconds")))
+        for item in accepted:
+            fingerprint = hashlib.sha256(item["url"].encode()).hexdigest()
+            translated_title, translated_summary = translate(item["title"]), translate(item["summary"])
+            cursor = db.execute("""INSERT OR IGNORE INTO news_items(fingerprint,source,title,translated_title,summary,translated_summary,url,published_at,topics,priority,first_seen_at)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?)""", (fingerprint, item["source"], item["title"], translated_title, item["summary"], translated_summary, item["url"], item["published_at"], ",".join(item["topics"]), len(item["topics"]), now_text()))
             if cursor.rowcount:
-                new_items.append(item)
-    recipient = setting("recipient")
-    smtp = {"host": setting("smtp_host", os.getenv("SMTP_HOST", "smtp.163.com")), "port": setting("smtp_port", os.getenv("SMTP_PORT", "465")), "user": setting("smtp_user", os.getenv("SMTP_USER", "")), "from": setting("smtp_from", os.getenv("SMTP_FROM", "")), "auth_code": setting("smtp_auth_code", os.getenv("SMTP_AUTH_CODE", ""), secret=True)}
-    if recipient and smtp["user"] and smtp["auth_code"]:
-        send_report(recipient, target_date, len(items), new_items, notices, smtp)
-    return len(items), len(new_items), "; ".join(notices) or "采集完成"
-
-
-def send_report(recipient: str, target_date: str, matched: int, new_items: list[dict], notices: list[str], smtp_config: dict[str, str]) -> None:
-    msg = EmailMessage()
-    msg["Subject"] = f"招标采集日报 {target_date}（新增 {len(new_items)} 条）"
-    msg["From"] = smtp_config["from"] or smtp_config["user"]
-    msg["To"] = recipient
-    lines = [f"目标日期：{target_date}", f"关键词命中：{matched} 条；新增：{len(new_items)} 条"]
-    for item in new_items:
-        lines.extend(("", item["title"], f"来源：{item['source']}；匹配：{','.join(item['matched_terms'])}", item["url"]))
-    if notices:
-        lines.extend(("", "提示：", *notices))
-    msg.set_content("\n".join(lines))
-    with smtplib.SMTP_SSL(smtp_config["host"], int(smtp_config["port"]), context=ssl.create_default_context()) as smtp:
-        smtp.login(smtp_config["user"], smtp_config["auth_code"])
-        smtp.send_message(msg)
+                item.update(translated_title=translated_title, translated_summary=translated_summary); new_items.append(item)
+    message = send_wecom(new_items)
+    return collected, len(new_items), "; ".join(warnings + [message])
