@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from .database import connect, init_db, now_text, set_setting, setting
-from .runner import collect_news
+from .runner import collect_news, send_wecom_test
 
 app = FastAPI(title="新闻数据采集平台")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -58,7 +58,8 @@ def context() -> dict:
                 "runs": db.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 10").fetchall(),
                 "schedule": setting("schedule", "08:00"),
                 "wecom_configured": bool(setting("wecom_webhook", secret=True)),
-                "translation_mode": setting("translation_mode", "argos")}
+                "translation_mode": setting("translation_mode", "argos"),
+                "wecom_message": setting("wecom_message")}
 
 
 @app.on_event("startup")
@@ -125,3 +126,12 @@ def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), tran
     set_setting("schedule", schedule); set_setting("translation_mode", translation_mode)
     if wecom_webhook.strip(): set_setting("wecom_webhook", wecom_webhook.strip(), secret=True)
     reschedule(); return RedirectResponse("/", 303)
+
+
+@app.post("/wecom/test")
+def test_wecom():
+    try:
+        set_setting("wecom_message", send_wecom_test())
+    except Exception as exc:
+        set_setting("wecom_message", f"测试发送失败：{type(exc).__name__}")
+    return RedirectResponse("/", 303)

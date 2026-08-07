@@ -67,6 +67,18 @@ def send_wecom(items: list[dict]) -> str:
     return f"企业微信已推送 {len(items)} 条新闻"
 
 
+def send_wecom_test() -> str:
+    """Send one non-persistent sample card to validate the configured webhook."""
+    sample = {
+        "source": "新闻数据采集平台", "title": "WeCom notification test",
+        "translated_title": "企业微信推送测试成功", "summary": "This is a test message.",
+        "translated_summary": "这是一条测试消息。企业微信机器人已成功接收新闻平台推送。",
+        "url": "https://github.com/dinggood615/news-data-collection-platform",
+        "topics": "科技,经济",
+    }
+    return send_wecom([sample])
+
+
 def collect_news() -> tuple[int, int, str]:
     with connect() as db:
         sources = [dict(row) for row in db.execute("SELECT * FROM news_sources WHERE enabled=1")]
