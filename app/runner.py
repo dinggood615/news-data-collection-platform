@@ -14,13 +14,6 @@ from .database import connect, now_text, setting
 
 DetectorFactory.seed = 0
 
-# Keep key political, economic and technology terms consistent when a local
-# machine-translation engine has different preferred wording.
-GLOSSARY = {
-    "artificial intelligence": "人工智能", "semiconductor": "半导体", "ceasefire": "停火",
-    "tariff": "关税", "white house": "白宫", "european union": "欧盟",
-    "united nations": "联合国", "nato": "北约", "world health organization": "世界卫生组织",
-}
 
 
 def _plain(value: str) -> str:
@@ -63,13 +56,6 @@ def _argos_translate(text: str) -> str:
         return ""
 
 
-def _apply_glossary(source: str, translated: str) -> str:
-    # Add stable Chinese terminology only when the translation engine did not
-    # already retain that term.  This avoids replacing whole sentences.
-    additions = [cn for term, cn in GLOSSARY.items() if term in source.casefold() and cn not in translated]
-    return f"{translated}（{'、'.join(additions)}）" if additions else translated
-
-
 def translate(text: str) -> str:
     """Free local translation with an offline Argos fallback; retain source on failure."""
     if not text or setting("translation_mode", "argos") == "off": return text
@@ -77,7 +63,7 @@ def translate(text: str) -> str:
         translated = _local_translate(text)
     except Exception:
         translated = _argos_translate(text)
-    return _apply_glossary(text, translated) if translated else text
+    return translated or text
 
 
 def _wecom_markdown(items: list[dict]) -> str:

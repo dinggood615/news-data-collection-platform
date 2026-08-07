@@ -6,7 +6,9 @@ text until the next successful update/install.
 """
 from __future__ import annotations
 
-LANGUAGES = ("en", "fr", "de", "es", "ru", "ar", "ja", "ko")
+# The bundled international sources publish English feeds.  More languages are
+# handled by a locally configured LibreTranslate service when needed.
+LANGUAGES = ("en",)
 
 
 def install_models() -> list[str]:

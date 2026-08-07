@@ -54,7 +54,7 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 # Initialize SQLite before the authenticated web endpoint is exposed.  This
 # prevents a first-request race from creating an empty database file.
 su -s /bin/bash "$SERVICE_USER" -c "set -a; source '$INSTALL_DIR/.env'; set +a; cd '$INSTALL_DIR'; .venv/bin/python -c 'from app.database import init_db; init_db()'"
-# Download free offline Argos models for common international-news languages.
+# Download the free English-to-Chinese offline Argos model used by built-in feeds.
 # A temporary model-index failure must not prevent the platform from starting.
 su -s /bin/bash "$SERVICE_USER" -c "cd '$INSTALL_DIR'; .venv/bin/python -m app.translation_setup" || echo "提示：离线翻译模型暂未下载完成；平台将保留原文并会在下次安装/更新时重试。"
 # Invoke explicitly with bash: Git mirrors may not preserve executable bits.
