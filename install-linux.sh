@@ -2,12 +2,12 @@
 set -euo pipefail
 
 # One-command native installer for systemd Linux distributions.
-REPOSITORY_URL="${1:-https://github.com/dinggood615/data-collection-management-platform.git}"
-INSTALL_DIR="${INSTALL_DIR:-/opt/data-collection-management-platform}"
-SERVICE_USER="tenderplatform"
+REPOSITORY_URL="${1:-https://github.com/dinggood615/news-data-collection-platform.git}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/news-data-collection-platform}"
+SERVICE_USER="newsplatform"
 PUBLIC_PORT="${PORT:-5555}"
 BACKEND_PORT=8000
-TLS_DIR=/etc/tender-platform/tls
+TLS_DIR=/etc/news-platform/tls
 
 die() { echo "错误：$*" >&2; exit 1; }
 [ "${EUID}" -eq 0 ] || die "请使用 sudo 运行"
@@ -46,7 +46,7 @@ python3 -m venv "$INSTALL_DIR/.venv"
 "$INSTALL_DIR/.venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt"
 if [ ! -f "$INSTALL_DIR/.env" ]; then
   cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
-  sed -i "s|APP_SECRET=.*|APP_SECRET=$(openssl rand -hex 32)|;s|ADMIN_USERNAME=.*|ADMIN_USERNAME=admin|;s|ADMIN_PASSWORD=.*|ADMIN_PASSWORD=admin|;s|DATABASE_PATH=.*|DATABASE_PATH=$INSTALL_DIR/data/platform.sqlite3|;s|SCRAPLING_STORAGE_PATH=.*|SCRAPLING_STORAGE_PATH=$INSTALL_DIR/data/scrapling-selectors.sqlite3|;s|CHROME_CDP_URL=.*|CHROME_CDP_URL=http://127.0.0.1:9222|" "$INSTALL_DIR/.env"
+  sed -i "s|APP_SECRET=.*|APP_SECRET=$(openssl rand -hex 32)|;s|ADMIN_USERNAME=.*|ADMIN_USERNAME=admin|;s|ADMIN_PASSWORD=.*|ADMIN_PASSWORD=admin|;s|DATABASE_PATH=.*|DATABASE_PATH=$INSTALL_DIR/data/news.sqlite3|" "$INSTALL_DIR/.env"
   chmod 600 "$INSTALL_DIR/.env"
 fi
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$INSTALL_DIR/data"
@@ -55,12 +55,10 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 # prevents a first-request race from creating an empty database file.
 su -s /bin/bash "$SERVICE_USER" -c "set -a; source '$INSTALL_DIR/.env'; set +a; cd '$INSTALL_DIR'; .venv/bin/python -c 'from app.database import init_db; init_db()'"
 # Invoke explicitly with bash: Git mirrors may not preserve executable bits.
-bash "$INSTALL_DIR/install-browser.sh" "$INSTALL_DIR" "$SERVICE_USER"
-systemctl is-active --quiet tender-manual-browser.service || die "可视 Chrome 服务未能启动，请检查 tender-manual-browser.service 日志"
 
-cat >/etc/systemd/system/tender-platform.service <<EOF
+cat >/etc/systemd/system/news-platform.service <<EOF
 [Unit]
-Description=招标采集管理平台
+Description=新闻数据采集平台
 After=network-online.target
 Wants=network-online.target
 
@@ -83,19 +81,19 @@ if [ ! -f "$TLS_DIR/cert.pem" ] || [ ! -f "$TLS_DIR/key.pem" ]; then
   chmod 600 "$TLS_DIR/key.pem"
 fi
 if [ -d /etc/nginx/sites-available ]; then
-  NGINX_SITE=/etc/nginx/sites-available/tender-platform
-  NGINX_ENABLED=/etc/nginx/sites-enabled/tender-platform
+  NGINX_SITE=/etc/nginx/sites-available/news-platform
+  NGINX_ENABLED=/etc/nginx/sites-enabled/news-platform
   install -m 644 "$INSTALL_DIR/nginx/tender-platform.conf" "$NGINX_SITE"
   ln -sfn "$NGINX_SITE" "$NGINX_ENABLED"
   rm -f /etc/nginx/sites-enabled/default
 else
-  NGINX_SITE=/etc/nginx/conf.d/tender-platform.conf
+  NGINX_SITE=/etc/nginx/conf.d/news-platform.conf
   install -m 644 "$INSTALL_DIR/nginx/tender-platform.conf" "$NGINX_SITE"
 fi
 sed -i "s/listen 5555 ssl;/listen $PUBLIC_PORT ssl;/" "$NGINX_SITE"
 nginx -t
 systemctl daemon-reload
-systemctl enable --now tender-platform.service
+systemctl enable --now news-platform.service
 systemctl enable nginx.service
 systemctl restart nginx.service
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
@@ -105,8 +103,8 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
   if curl -fsS "http://127.0.0.1:$BACKEND_PORT/healthz" >/dev/null; then
     break
   fi
-  [ "$attempt" -eq 10 ] && die "平台健康检查失败，请执行：journalctl -u tender-platform -n 80 --no-pager"
+  [ "$attempt" -eq 10 ] && die "平台健康检查失败，请执行：journalctl -u news-platform -n 80 --no-pager"
   sleep 2
 done
 echo "完成：访问 https://服务器IP:$PUBLIC_PORT。初始账户 admin/admin，请立即修改。"
-echo "人工验证：在自定义站点卡片点击‘打开此站验证’，无需 SSH 隧道。"
+echo "请在平台中配置企业微信机器人 Webhook；未配置本地翻译服务时会自动保留原文。"

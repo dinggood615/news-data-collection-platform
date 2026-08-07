@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # One-command Docker installer for Ubuntu/Debian.
-REPOSITORY_URL="${1:-https://github.com/dinggood615/data-collection-management-platform.git}"
-INSTALL_DIR="${INSTALL_DIR:-/opt/data-collection-management-platform}"
+REPOSITORY_URL="${1:-https://github.com/dinggood615/news-data-collection-platform.git}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/news-data-collection-platform}"
 
 if [ "${EUID}" -ne 0 ]; then echo "请使用 sudo 运行"; exit 1; fi
 apt-get update

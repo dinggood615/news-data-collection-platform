@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_DIR="${INSTALL_DIR:-/opt/data-collection-management-platform}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/news-data-collection-platform}"
 AUTO_CONFIRM="${1:-}"
 
 if [ "${EUID}" -ne 0 ]; then
@@ -18,10 +18,10 @@ if [ -f "$INSTALL_DIR/docker-compose.yml" ] && command -v docker >/dev/null 2>&1
   docker compose -f "$INSTALL_DIR/docker-compose.yml" down -v --remove-orphans 2>/dev/null || true
 fi
 
-systemctl disable --now tender-platform.service tender-manual-browser.service 2>/dev/null || true
-rm -f /etc/systemd/system/tender-platform.service /etc/systemd/system/tender-manual-browser.service
-rm -f /etc/nginx/sites-enabled/tender-platform /etc/nginx/sites-available/tender-platform /etc/nginx/conf.d/tender-platform.conf
-rm -rf /etc/tender-platform "$INSTALL_DIR"
+systemctl disable --now news-platform.service 2>/dev/null || true
+rm -f /etc/systemd/system/news-platform.service
+rm -f /etc/nginx/sites-enabled/news-platform /etc/nginx/sites-available/news-platform /etc/nginx/conf.d/news-platform.conf
+rm -rf /etc/news-platform "$INSTALL_DIR"
 systemctl daemon-reload
 systemctl reset-failed
 

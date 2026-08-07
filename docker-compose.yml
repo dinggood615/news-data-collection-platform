@@ -1,14 +1,14 @@
 services:
-  tender-platform:
+  news-platform:
     build: .
-    container_name: tender-platform
+    container_name: news-platform
     restart: unless-stopped
     env_file: .env
     ports:
       - "8000:8000"
     volumes:
-      - platform_data:/data
+      - news_platform_data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
 volumes:
-  platform_data:
+  news_platform_data:
