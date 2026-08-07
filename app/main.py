@@ -5,6 +5,7 @@ import base64
 import os
 import secrets
 from datetime import datetime
+from urllib.parse import parse_qs, urlparse
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Form, Request
@@ -124,7 +125,15 @@ def save_topic(topic: str, terms: str = Form(...), enabled: str = Form("0")):
 @app.post("/settings")
 def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), translation_mode: str = Form("argos")):
     set_setting("schedule", schedule); set_setting("translation_mode", translation_mode)
-    if wecom_webhook.strip(): set_setting("wecom_webhook", wecom_webhook.strip(), secret=True)
+    if wecom_webhook.strip():
+        parsed = urlparse(wecom_webhook.strip())
+        valid_webhook = (parsed.scheme == "https" and parsed.netloc == "qyapi.weixin.qq.com"
+                         and parsed.path == "/cgi-bin/webhook/send" and bool(parse_qs(parsed.query).get("key")))
+        if not valid_webhook:
+            set_setting("wecom_message", "Webhook 地址格式错误。请在企业微信机器人详情中复制 qyapi.weixin.qq.com 的 Webhook 地址。")
+            return RedirectResponse("/", 303)
+        set_setting("wecom_webhook", wecom_webhook.strip(), secret=True)
+        set_setting("wecom_message", "企业微信 Webhook 已保存，可点击下方按钮发送测试消息。")
     reschedule(); return RedirectResponse("/", 303)
 
 
