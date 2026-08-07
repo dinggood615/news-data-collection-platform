@@ -54,6 +54,9 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 # Initialize SQLite before the authenticated web endpoint is exposed.  This
 # prevents a first-request race from creating an empty database file.
 su -s /bin/bash "$SERVICE_USER" -c "set -a; source '$INSTALL_DIR/.env'; set +a; cd '$INSTALL_DIR'; .venv/bin/python -c 'from app.database import init_db; init_db()'"
+# Download free offline Argos models for common international-news languages.
+# A temporary model-index failure must not prevent the platform from starting.
+su -s /bin/bash "$SERVICE_USER" -c "cd '$INSTALL_DIR'; .venv/bin/python -m app.translation_setup" || echo "提示：离线翻译模型暂未下载完成；平台将保留原文并会在下次安装/更新时重试。"
 # Invoke explicitly with bash: Git mirrors may not preserve executable bits.
 
 cat >/etc/systemd/system/news-platform.service <<EOF
@@ -107,4 +110,4 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
   sleep 2
 done
 echo "完成：访问 https://服务器IP:$PUBLIC_PORT。初始账户 admin/admin，请立即修改。"
-echo "请在平台中配置企业微信机器人 Webhook；未配置本地翻译服务时会自动保留原文。"
+echo "已配置免费离线翻译模型（Argos）；企业微信 Webhook 请在平台内填写。"

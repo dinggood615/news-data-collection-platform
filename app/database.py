@@ -30,11 +30,16 @@ def connect():
 
 DEFAULT_SOURCES = (
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+    ("BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml"),
+    ("BBC Technology", "https://feeds.bbci.co.uk/news/technology/rss.xml"),
     ("DW World", "https://rss.dw.com/rdf/rss-en-world"),
     ("France 24", "https://www.france24.com/en/rss"),
     ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
     ("UN News", "https://news.un.org/feed/subscribe/en/news/all/rss.xml"),
     ("The Guardian World", "https://www.theguardian.com/world/rss"),
+    ("NPR World", "https://feeds.npr.org/1004/rss.xml"),
+    ("CBC World", "https://www.cbc.ca/webfeed/rss/rss-world"),
+    ("Sky News World", "https://feeds.skynews.com/feeds/rss/world.xml"),
 )
 
 DEFAULT_TERMS = {

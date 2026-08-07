@@ -8,8 +8,19 @@ from html import unescape
 from urllib.request import Request, urlopen
 
 import feedparser
+from langdetect import DetectorFactory, LangDetectException, detect
 
 from .database import connect, now_text, setting
+
+DetectorFactory.seed = 0
+
+# Keep key political, economic and technology terms consistent when a local
+# machine-translation engine has different preferred wording.
+GLOSSARY = {
+    "artificial intelligence": "人工智能", "semiconductor": "半导体", "ceasefire": "停火",
+    "tariff": "关税", "white house": "白宫", "european union": "欧盟",
+    "united nations": "联合国", "nato": "北约", "world health organization": "世界卫生组织",
+}
 
 
 def _plain(value: str) -> str:
@@ -25,17 +36,48 @@ def _topics(title: str, summary: str, rules: list[dict]) -> list[str]:
     return matched
 
 
-def translate(text: str) -> str:
-    """Use a local LibreTranslate-compatible endpoint; source text is retained on failure."""
-    if not text or setting("translation_mode", "argos") == "off": return text
+def _local_translate(text: str) -> str:
+    """Try the local LibreTranslate-compatible API first."""
     endpoint = setting("translation_endpoint", "http://127.0.0.1:5000/translate")
     body = json.dumps({"q": text[:2500], "source": "auto", "target": "zh", "format": "text"}).encode()
+    request = Request(endpoint, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    with urlopen(request, timeout=20) as response:
+        return str(json.loads(response.read().decode())["translatedText"]).strip()
+
+
+def _argos_translate(text: str) -> str:
+    """Offline fallback using installed Argos language packages."""
     try:
-        request = Request(endpoint, data=body, headers={"Content-Type": "application/json"}, method="POST")
-        with urlopen(request, timeout=20) as response:
-            return str(json.loads(response.read().decode())["translatedText"]).strip() or text
+        import argostranslate.translate
+        try:
+            source = detect(text[:1000]).lower().split("-")[0]
+        except LangDetectException:
+            source = "en"
+        if source == "zh":
+            return text
+        languages = {language.code: language for language in argostranslate.translate.get_installed_languages()}
+        if source not in languages or "zh" not in languages:
+            return ""
+        return languages[source].get_translation(languages["zh"]).translate(text[:2500]).strip()
     except Exception:
-        return text
+        return ""
+
+
+def _apply_glossary(source: str, translated: str) -> str:
+    # Add stable Chinese terminology only when the translation engine did not
+    # already retain that term.  This avoids replacing whole sentences.
+    additions = [cn for term, cn in GLOSSARY.items() if term in source.casefold() and cn not in translated]
+    return f"{translated}（{'、'.join(additions)}）" if additions else translated
+
+
+def translate(text: str) -> str:
+    """Free local translation with an offline Argos fallback; retain source on failure."""
+    if not text or setting("translation_mode", "argos") == "off": return text
+    try:
+        translated = _local_translate(text)
+    except Exception:
+        translated = _argos_translate(text)
+    return _apply_glossary(text, translated) if translated else text
 
 
 def _wecom_markdown(items: list[dict]) -> str:
