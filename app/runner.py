@@ -147,10 +147,11 @@ def collect_news() -> tuple[int, int, str]:
     with connect() as db:
         for item in accepted:
             fingerprint = hashlib.sha256(item["url"].encode()).hexdigest()
-            translated_title, translated_summary = translate(item["title"]), translate(item["summary"])
             cursor = db.execute("""INSERT OR IGNORE INTO news_items(fingerprint,source,title,translated_title,summary,translated_summary,url,published_at,topics,priority,first_seen_at)
-              VALUES(?,?,?,?,?,?,?,?,?,?,?)""", (fingerprint, item["source"], item["title"], translated_title, item["summary"], translated_summary, item["url"], item["published_at"], ",".join(item["topics"]), len(item["topics"]), now_text()))
+              VALUES(?,?,?,?,?,?,?,?,?,?,?)""", (fingerprint, item["source"], item["title"], "", item["summary"], "", item["url"], item["published_at"], ",".join(item["topics"]), len(item["topics"]), now_text()))
             if cursor.rowcount:
+                translated_title, translated_summary = translate(item["title"]), translate(item["summary"])
+                db.execute("""UPDATE news_items SET translated_title=?,translated_summary=? WHERE fingerprint=?""", (translated_title, translated_summary, fingerprint))
                 item.update(translated_title=translated_title, translated_summary=translated_summary); new_items.append(item)
     message = send_wecom(new_items)
     return collected, len(new_items), "; ".join(warnings + [message])
