@@ -4,7 +4,8 @@
 
 ## 功能
 
-- 内置 BBC World、DW World、France 24、Al Jazeera、UN News、The Guardian World 等公开 RSS 源；可在页面中启用、停用、添加或删除来源。
+- 内置 BBC、DW、France 24、Al Jazeera、UN News、The Guardian，以及亚洲的联合早报（FeedX 镜像）、CNA 亚洲/新加坡/商业、南华早报中国/亚洲、The Japan Times 等公开 RSS 源；可在页面中启用、停用、添加或删除来源。
+- 联合早报镜像及部分媒体 RSS 仅提供标题、摘要和原文链接，使用前请遵守来源网站的 RSS、版权和个人/非商业使用条款。
 - 五类主题规则可编辑，一篇新闻可命中多个主题；按原文链接去重。
 - 支持本地 LibreTranslate / Argos 翻译接口，无需付费 API；翻译不可用时自动保留原文，不会中断采集。
 - 企业微信机器人 Markdown 自动排版、分段、去重推送；Webhook 仅加密保存在服务器。

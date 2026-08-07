@@ -40,6 +40,14 @@ DEFAULT_SOURCES = (
     ("NPR World", "https://feeds.npr.org/1004/rss.xml"),
     ("CBC World", "https://www.cbc.ca/webfeed/rss/rss-world"),
     ("Sky News World", "https://feeds.skynews.com/feeds/rss/world.xml"),
+    # Asia-Pacific sources with publicly documented RSS feeds.
+    ("联合早报（FeedX镜像）", "https://feedx.site/rss/zaobao.xml"),
+    ("CNA 亚洲", "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511"),
+    ("CNA 新加坡", "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=10416"),
+    ("CNA 商业", "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6936"),
+    ("南华早报中国", "https://www.scmp.com/rss/4/feed"),
+    ("南华早报亚洲", "https://www.scmp.com/rss/35/feed"),
+    ("The Japan Times", "https://www.japantimes.co.jp/feed/"),
 )
 
 DEFAULT_TERMS = {
