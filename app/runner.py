@@ -20,11 +20,29 @@ def _plain(value: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", unescape(value or ""))).strip()
 
 
+def _term_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        raw_terms = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            raw_terms = re.split(r"[,，\n;；]+", text)
+        else:
+            raw_terms = parsed if isinstance(parsed, list) else [text]
+    return [str(term).strip().casefold() for term in raw_terms if str(term).strip()]
+
+
 def _topics(title: str, summary: str, rules: list[dict]) -> list[str]:
     text = f"{title} {summary}".casefold()
     matched = []
     for rule in rules:
-        terms = [term.strip().casefold() for term in rule["terms"].replace("，", ",").split(",")]
+        terms = _term_list(rule["terms"])
         if any(term and term in text for term in terms): matched.append(rule["topic"])
     return matched
 
