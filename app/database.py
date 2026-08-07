@@ -40,6 +40,10 @@ DEFAULT_SOURCES = (
     ("NPR World", "https://feeds.npr.org/1004/rss.xml"),
     ("CBC World", "https://www.cbc.ca/webfeed/rss/rss-world"),
     ("Sky News World", "https://feeds.skynews.com/feeds/rss/world.xml"),
+    ("重大新闻（BBC）", "https://feeds.bbci.co.uk/news/rss.xml"),
+    ("重大新闻（美联社）", "https://feeds.apnews.com/apnews/topnews"),
+    ("商业新闻（BBC）", "https://feeds.bbci.co.uk/news/business/rss.xml"),
+    ("商业新闻（DW）", "https://rss.dw.com/rdf/rss-en-bus"),
     # Asia-Pacific sources with publicly documented RSS feeds.
     ("联合早报（FeedX镜像）", "https://feedx.site/rss/zaobao.xml"),
     ("CNA 亚洲", "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511"),
