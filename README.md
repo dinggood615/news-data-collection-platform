@@ -29,6 +29,14 @@ curl -fsSL https://raw.githubusercontent.com/dinggood615/news-data-collection-pl
 
 安装完成后访问 `https://<服务器IP>:5555`。默认管理员账户为 `admin / admin`，请立即在服务器 `.env` 中修改 `ADMIN_PASSWORD` 后重启 `news-platform` 服务。
 
+如果需要 Telegram，请先在域名控制台添加 `A` 记录指向服务器公网 IP，并在安全组/防火墙放行 TCP `80`、`443`、`5555`，随后使用下面的安装命令。安装器会自动申请并配置 Let's Encrypt 证书：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dinggood615/news-data-collection-platform/main/install-linux.sh | sudo env DOMAIN=news.example.com LETSENCRYPT_EMAIL=you@example.com bash -s -- https://github.com/dinggood615/news-data-collection-platform.git
+```
+
+`DOMAIN` 只能填写域名，不含 `https://`、路径或端口。未提供 `DOMAIN` 时仍可安装平台，但会使用自签名证书，Telegram Webhook 不可用。
+
 ## 首次配置
 
 1. 在“国际新闻源”确认启用所需 RSS 源，或添加公开 RSS/API 地址。
@@ -41,9 +49,18 @@ curl -fsSL https://raw.githubusercontent.com/dinggood615/news-data-collection-pl
 
 Telegram 通过 Webhook 接收命令，因此必须准备一个已解析到服务器的域名和有效 HTTPS 证书；不要填写 IP 地址或 `:5555` 端口。平台会在标准 `443` 端口接收 `https://<域名>/telegram/callback`，该路径仅校验 Telegram 的秘密请求头，不会暴露后台页面。
 
-1. 在“Telegram 机器人”填入 BotFather 生成的 Token 和 `https://<你的域名>`，保存后点击“配置 Telegram Webhook”。
-2. 在机器人会话中发送**准确的** `/start`。
-3. 回到平台点击“一键批准绑定”；之后可从 Telegram 发送“状态”“立即采集”“最新新闻”或“备份”。
+1. 在 BotFather 创建机器人并复制 Token；Token 仅填写在平台页面，不要提交至 GitHub 或发送给他人。
+2. 在“Telegram 机器人”填入 Token 和 `https://<你的域名>`，保存后点击“配置 Telegram Webhook”。
+3. 在机器人会话中发送**准确的** `/start`（不是 `/star`）。
+4. 回到平台点击“一键批准绑定”；之后可从 Telegram 发送“状态”“立即采集”“最新新闻”或“备份”。
+
+### Telegram 无法绑定时的检查顺序
+
+1. 确认域名的公网 DNS 已解析到当前服务器，而非旧 IP。
+2. 浏览器访问 `https://<你的域名>/healthz`，应返回 `{"status":"ok"...}`；证书不能显示不受信任。
+3. 在 Telegram 设置中确认地址是 `https://<你的域名>`，不带 `:5555`；Telegram 仅能使用标准 Webhook HTTPS 端口。
+4. 点击“配置 Telegram Webhook”后再发送 `/start`，刷新平台后点击“一键批准绑定”。
+5. 若仍失败，在服务器运行 `sudo journalctl -u news-platform -n 100 --no-pager`；出现 `/telegram/callback` 的 `POST 200` 即代表消息已送达平台。
 
 ## 一键卸载
 

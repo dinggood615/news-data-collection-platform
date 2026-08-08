@@ -8,6 +8,8 @@ SERVICE_USER="newsplatform"
 PUBLIC_PORT="${PORT:-5555}"
 BACKEND_PORT=8000
 TLS_DIR=/etc/news-platform/tls
+DOMAIN="${DOMAIN:-}"
+LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 
 die() { echo "错误：$*" >&2; exit 1; }
 [ "${EUID}" -eq 0 ] || die "请使用 sudo 运行"
@@ -30,6 +32,27 @@ install_packages() {
   fi
 }
 
+install_certbot() {
+  if command -v certbot >/dev/null; then return; fi
+  if command -v apt-get >/dev/null; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y certbot
+  elif command -v dnf >/dev/null; then
+    dnf install -y certbot
+  elif command -v yum >/dev/null; then
+    yum install -y certbot
+  elif command -v zypper >/dev/null; then
+    zypper --non-interactive install certbot
+  elif command -v pacman >/dev/null; then
+    pacman -Sy --noconfirm certbot
+  else
+    die "无法安装 Certbot。请先安装 Certbot 后重新执行，并传入 DOMAIN。"
+  fi
+}
+
+valid_domain() {
+  [ -z "$DOMAIN" ] || printf '%s' "$DOMAIN" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$'
+}
+
 git_repo() {
   if [ -n "${GITHUB_TOKEN:-}" ]; then
     git -c http.extraHeader="Authorization: Bearer ${GITHUB_TOKEN}" "$@"
@@ -39,6 +62,7 @@ git_repo() {
 }
 
 install_packages
+valid_domain || die "DOMAIN 格式不正确；请只填写域名，例如 news.example.com。"
 id "$SERVICE_USER" >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin "$SERVICE_USER"
 if [ -d "$INSTALL_DIR/.git" ]; then git_repo -C "$INSTALL_DIR" pull --ff-only; else git_repo clone "$REPOSITORY_URL" "$INSTALL_DIR"; fi
 python3 -m venv "$INSTALL_DIR/.venv"
@@ -101,6 +125,9 @@ if [ "$PUBLIC_PORT" != "443" ]; then
 else
   sed -i '/listen 5555 ssl;/d' "$NGINX_SITE"
 fi
+if [ -n "$DOMAIN" ]; then
+  sed -i "s/server_name _;/server_name $DOMAIN;/" "$NGINX_SITE"
+fi
 nginx -t
 systemctl daemon-reload
 systemctl enable --now news-platform.service
@@ -116,5 +143,24 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
   [ "$attempt" -eq 10 ] && die "平台健康检查失败，请执行：journalctl -u news-platform -n 80 --no-pager"
   sleep 2
 done
+if [ -n "$DOMAIN" ]; then
+  echo "正在为 $DOMAIN 申请 Let's Encrypt 证书；请确认 DNS 已解析到本服务器且防火墙/安全组已放行 80、443。"
+  install_certbot
+  systemctl stop nginx.service
+  CERTBOT_ARGS=(certonly --standalone --non-interactive --agree-tos --keep-until-expiring -d "$DOMAIN")
+  if [ -n "$LETSENCRYPT_EMAIL" ]; then CERTBOT_ARGS+=(--email "$LETSENCRYPT_EMAIL"); else CERTBOT_ARGS+=(--register-unsafely-without-email); fi
+  if ! certbot "${CERTBOT_ARGS[@]}"; then
+    systemctl start nginx.service
+    die "Let's Encrypt 证书申请失败。请检查域名解析和 80/443 入站规则，然后重新运行安装命令。"
+  fi
+  ln -sfn "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" "$TLS_DIR/cert.pem"
+  ln -sfn "/etc/letsencrypt/live/$DOMAIN/privkey.pem" "$TLS_DIR/key.pem"
+  systemctl start nginx.service
+  systemctl reload nginx.service
+  echo "HTTPS 证书已就绪：Telegram Webhook 请填写 https://$DOMAIN（不要带 :$PUBLIC_PORT）。"
+else
+  echo "提示：当前使用自签名证书，仅适合仪表盘测试；Telegram Webhook 需要有效域名证书。"
+  echo "需要 Telegram 时，请使用 DOMAIN=你的域名 LETSENCRYPT_EMAIL=你的邮箱 重新运行安装命令。"
+fi
 echo "完成：访问 https://服务器IP:$PUBLIC_PORT。初始账户 admin/admin，请立即修改。"
 echo "已配置免费离线翻译模型（Argos）；企业微信 Webhook 请在平台内填写。"
