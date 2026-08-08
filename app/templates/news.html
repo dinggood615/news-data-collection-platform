@@ -188,7 +188,8 @@
 <button class="accent">保存 Telegram 配置</button>
 </form>
 <form action="/telegram/webhook" method="post" class="actions"><button>配置 Telegram Webhook</button></form>
-{% if telegram_pending_user %}<p class="notice">待绑定用户：{{ telegram_pending_user.split('|', 1)[1] }}。确认是本人后点击批准。</p><form action="/telegram/bind-pending" method="post" class="actions"><button class="accent">一键批准绑定</button></form>{% else %}<p class="muted">配置完成后，在 TG 对机器人发送 <code>/start</code>，再回到此处一键批准即可。</p>{% endif %}
+{% if telegram_pending_user %}<p class="notice">待绑定用户：{{ telegram_pending_user.split('|', 1)[1] }}。确认是本人后点击批准。</p>{% else %}<p class="muted">配置完成后，在 TG 对机器人发送 <code>/start</code>，再回到此处点击批准即可。</p>{% endif %}
+<form action="/telegram/bind-pending" method="post" class="actions"><button class="accent">一键批准绑定</button></form>
 </section>
 </main>
 <footer>仅采集公开且允许访问的新闻源 · 不绕过登录、付费墙或访问控制</footer>
