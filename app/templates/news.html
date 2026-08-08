@@ -184,10 +184,12 @@
 <p class="muted">Webhook 地址：<code>https://你的域名/telegram/callback</code></p>
 <form action="/telegram/settings" method="post" class="site-form site-entry">
 <label>Bot Token<input type="password" name="bot_token" placeholder="从 @BotFather 获取；留空则不修改"></label>
-<label>Webhook Secret<input type="password" name="webhook_secret" placeholder="留空时自动生成"></label>
+<label>Webhook Secret<input type="password" name="webhook_secret" placeholder="自行生成并保存；留空则不修改"></label>
 <label>管理员 TG User ID<input name="admin_users" placeholder="多个 ID 用英文逗号分隔"></label>
+<label>HTTPS 公网地址<input name="public_url" placeholder="例如：https://news.example.com"></label>
 <button class="accent">保存 Telegram 配置</button>
 </form>
+<form action="/telegram/webhook" method="post" class="actions"><button>配置 Telegram Webhook</button></form>
 </section>
 </main>
 <footer>仅采集公开且允许访问的新闻源 · 不绕过登录、付费墙或访问控制</footer>

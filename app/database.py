@@ -98,7 +98,8 @@ def init_db() -> None:
                                    ("wecom_admin_users", os.getenv("WECOM_ADMIN_USERS", ""), False),
                                    ("telegram_bot_token", os.getenv("TELEGRAM_BOT_TOKEN", ""), True),
                                    ("telegram_webhook_secret", os.getenv("TELEGRAM_WEBHOOK_SECRET", ""), True),
-                                   ("telegram_admin_users", os.getenv("TELEGRAM_ADMIN_USERS", ""), False)):
+                                   ("telegram_admin_users", os.getenv("TELEGRAM_ADMIN_USERS", ""), False),
+                                   ("telegram_public_url", os.getenv("TELEGRAM_PUBLIC_URL", ""), False)):
             existing = db.execute("SELECT 1 FROM settings WHERE key=?", (key,)).fetchone()
             if not existing:
                 stored = "enc:" + _cipher().encrypt(value.encode()).decode() if secret and value else value

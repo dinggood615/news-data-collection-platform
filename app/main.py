@@ -7,7 +7,9 @@ import json
 import os
 import secrets
 from datetime import datetime
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlencode, urlparse
+from urllib.request import Request as UrlRequest, urlopen
+from urllib.parse import parse_qs
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Form, Request
@@ -250,16 +252,36 @@ def save_wecom_app_settings(corp_id: str = Form(""), agent_id: str = Form(""), a
 
 
 @app.post("/telegram/settings")
-def save_telegram_settings(bot_token: str = Form(""), webhook_secret: str = Form(""), admin_users: str = Form("")):
+def save_telegram_settings(bot_token: str = Form(""), webhook_secret: str = Form(""), admin_users: str = Form(""), public_url: str = Form("")):
     if bot_token.strip():
         set_setting("telegram_bot_token", bot_token.strip(), secret=True)
     if webhook_secret.strip():
         set_setting("telegram_webhook_secret", webhook_secret.strip(), secret=True)
-    elif not setting("telegram_webhook_secret", secret=True):
-        set_setting("telegram_webhook_secret", secrets.token_urlsafe(24), secret=True)
     if admin_users.strip():
         set_setting("telegram_admin_users", admin_users.strip())
+    if public_url.strip():
+        parsed = urlparse(public_url.strip())
+        if parsed.scheme == "https" and parsed.netloc:
+            set_setting("telegram_public_url", public_url.strip().rstrip("/"))
     set_setting("wecom_message", "Telegram 配置已保存；请将 Webhook 指向 /telegram/callback。")
+    return RedirectResponse("/", 303)
+
+
+@app.post("/telegram/webhook")
+def configure_telegram_webhook():
+    token = setting("telegram_bot_token", secret=True)
+    secret = setting("telegram_webhook_secret", secret=True)
+    public_url = setting("telegram_public_url", "").rstrip("/")
+    if not token or not secret or not public_url:
+        set_setting("wecom_message", "请先保存 Telegram Token、Webhook Secret 和 HTTPS 公网地址。")
+        return RedirectResponse("/", 303)
+    try:
+        body = urlencode({"url": f"{public_url}/telegram/callback", "secret_token": secret, "allowed_updates": json.dumps(["message"])}).encode()
+        request = UrlRequest(f"https://api.telegram.org/bot{token}/setWebhook", data=body, method="POST")
+        response = json.loads(urlopen(request, timeout=15).read().decode())
+        set_setting("wecom_message", "Telegram Webhook 已配置。" if response.get("ok") else "Telegram Webhook 配置失败。")
+    except Exception:
+        set_setting("wecom_message", "Telegram Webhook 配置失败，请检查公网 HTTPS 和 Token。")
     return RedirectResponse("/", 303)
 
 
