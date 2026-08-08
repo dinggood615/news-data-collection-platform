@@ -30,7 +30,7 @@ def serializer() -> URLSafeTimedSerializer:
 
 @app.middleware("http")
 async def admin_only(request: Request, call_next):
-    if request.url.path == "/healthz" or request.url.path.startswith("/static/"):
+    if request.url.path in {"/healthz", "/wecom/callback"} or request.url.path.startswith("/static/"):
         return await call_next(request)
     username = setting("admin_username", os.getenv("ADMIN_USERNAME", "admin"))
     password = setting("admin_password", os.getenv("ADMIN_PASSWORD", "admin"), secret=True)
