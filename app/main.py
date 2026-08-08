@@ -65,9 +65,12 @@ def context() -> dict:
                 "wecom_configured": bool(setting("wecom_webhook", secret=True)),
                 "translation_mode": setting("translation_mode", "argos"),
                 "wecom_message": setting("wecom_message"),
-                "wecom_app_configured": all((setting("wecom_corp_id", secret=True), setting("wecom_agent_id"),
-                                             setting("wecom_app_secret", secret=True), setting("wecom_callback_token", secret=True),
-                                             setting("wecom_encoding_aes_key", secret=True))),
+                "wecom_app_configured": all((setting("wecom_corp_id", secret=True), setting("wecom_callback_token", secret=True),
+                                             setting("wecom_encoding_aes_key", secret=True), setting("wecom_public_url", ""),
+                                             setting("wecom_admin_users", ""))),
+                "wecom_callback_url": _wecom_callback_url(),
+                "wecom_callback_token_value": setting("wecom_callback_token", secret=True),
+                "wecom_encoding_aes_key_value": setting("wecom_encoding_aes_key", secret=True),
                 "telegram_pending_user": setting("telegram_pending_user"),
                 "assistant_message": setting("assistant_message")}
 
@@ -152,6 +155,16 @@ def _wecom_crypto():
     if not all((corp_id, token, aes_key)):
         raise RuntimeError("企业微信自建应用回调尚未配置")
     return WeChatCrypto(token, aes_key, corp_id)
+
+
+def _wecom_callback_url() -> str:
+    public_url = setting("wecom_public_url", "").rstrip("/")
+    return f"{public_url}/wecom/callback" if public_url else ""
+
+
+def _new_wecom_aes_key() -> str:
+    """Enterprise WeChat expects a 43-character base64 AES key (without =)."""
+    return base64.b64encode(secrets.token_bytes(32)).decode().rstrip("=")
 
 
 def _wecom_sender_allowed(user_id: str) -> bool:
@@ -249,6 +262,47 @@ def save_wecom_app_settings(corp_id: str = Form(""), agent_id: str = Form(""), a
     if admin_users.strip():
         set_setting("wecom_admin_users", admin_users.strip())
     set_setting("wecom_message", "企业微信自建应用配置已保存；请在企业微信后台验证回调地址。")
+    return RedirectResponse("/", 303)
+
+
+@app.post("/wecom/quick-settings")
+def save_wecom_quick_settings(corp_id: str = Form(""), public_url: str = Form(""), admin_users: str = Form("")):
+    """Save the minimum self-built-app settings and generate callback secrets."""
+    if corp_id.strip():
+        set_setting("wecom_corp_id", corp_id.strip(), secret=True)
+    if public_url.strip():
+        parsed = urlparse(public_url.strip())
+        if parsed.scheme != "https" or not parsed.netloc or parsed.path not in ("", "/"):
+            set_setting("wecom_message", "企业微信公网地址应为有效 HTTPS 根地址，例如 https://news.example.com。")
+            return RedirectResponse("/", 303)
+        set_setting("wecom_public_url", public_url.strip().rstrip("/"))
+    if admin_users.strip():
+        users = [item.strip() for item in admin_users.replace("，", ",").split(",") if item.strip()]
+        set_setting("wecom_admin_users", ",".join(dict.fromkeys(users)))
+    if not setting("wecom_callback_token", secret=True):
+        set_setting("wecom_callback_token", secrets.token_hex(16), secret=True)
+    if not setting("wecom_encoding_aes_key", secret=True):
+        set_setting("wecom_encoding_aes_key", _new_wecom_aes_key(), secret=True)
+    set_setting("wecom_message", "企业微信快速配置已保存。复制下方三项到企业微信自建应用的“接收消息”页面后点击保存验证。")
+    return RedirectResponse("/", 303)
+
+
+@app.post("/wecom/check")
+def check_wecom_setup():
+    missing = []
+    if not setting("wecom_corp_id", secret=True): missing.append("CorpID")
+    if not setting("wecom_public_url", ""): missing.append("HTTPS 公网地址")
+    if not setting("wecom_admin_users", ""): missing.append("管理员 UserID")
+    if not setting("wecom_callback_token", secret=True): missing.append("Token")
+    if not setting("wecom_encoding_aes_key", secret=True): missing.append("EncodingAESKey")
+    if missing:
+        set_setting("wecom_message", "企业微信配置尚不完整：" + "、".join(missing))
+    else:
+        try:
+            _wecom_crypto()
+            set_setting("wecom_message", "配置已就绪：将下方回调地址、Token、EncodingAESKey 粘贴到企业微信自建应用并保存验证；随后发送“状态”即可。")
+        except Exception:
+            set_setting("wecom_message", "本地回调参数校验失败，请重新保存企业微信快速配置。")
     return RedirectResponse("/", 303)
 
 

@@ -45,6 +45,13 @@ curl -fsSL https://raw.githubusercontent.com/dinggood615/news-data-collection-pl
 4. 本地免费翻译服务默认地址为 `http://127.0.0.1:5000/translate`；配置 LibreTranslate 后会自动使用。未配置时保留原文。
 5. 点击“立即采集”执行首次测试。
 
+### 企业微信：推送与聊天助手
+
+- 仅接收每日新闻推送时，使用企业微信群机器人 Webhook：在“企业微信与翻译”粘贴 Webhook 后点击“发送测试消息”即可，无须配置回调。
+- 需要像 Telegram 一样通过聊天控制平台时，在“企业微信助手”仅填写 **CorpID、HTTPS 公网地址、管理员 UserID**。平台会自动生成 Token 与 EncodingAESKey，并显示“回调地址、Token、EncodingAESKey”三项。
+- 将这三项复制到企业微信管理后台的“应用管理 → 自建应用 → 接收消息”，保存验证后，即可向应用发送“状态”“立即采集”“最新新闻”或“备份”。
+- 企业微信后台必须由企业管理员完成一次回调验证；这是企业微信的平台安全要求，无法由服务器绕过或自动代替。
+
 ### Telegram 绑定
 
 Telegram 通过 Webhook 接收命令，因此必须准备一个已解析到服务器的域名和有效 HTTPS 证书；不要填写 IP 地址或 `:5555` 端口。平台会在标准 `443` 端口接收 `https://<域名>/telegram/callback`，该路径仅校验 Telegram 的秘密请求头，不会暴露后台页面。
