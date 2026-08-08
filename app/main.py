@@ -68,6 +68,7 @@ def context() -> dict:
                 "wecom_app_configured": all((setting("wecom_corp_id", secret=True), setting("wecom_agent_id"),
                                              setting("wecom_app_secret", secret=True), setting("wecom_callback_token", secret=True),
                                              setting("wecom_encoding_aes_key", secret=True))),
+                "telegram_pending_user": setting("telegram_pending_user"),
                 "assistant_message": setting("assistant_message")}
 
 
@@ -252,18 +253,30 @@ def save_wecom_app_settings(corp_id: str = Form(""), agent_id: str = Form(""), a
 
 
 @app.post("/telegram/settings")
-def save_telegram_settings(bot_token: str = Form(""), webhook_secret: str = Form(""), admin_users: str = Form(""), public_url: str = Form("")):
+def save_telegram_settings(bot_token: str = Form(""), public_url: str = Form("")):
     if bot_token.strip():
         set_setting("telegram_bot_token", bot_token.strip(), secret=True)
-    if webhook_secret.strip():
-        set_setting("telegram_webhook_secret", webhook_secret.strip(), secret=True)
-    if admin_users.strip():
-        set_setting("telegram_admin_users", admin_users.strip())
+    if not setting("telegram_webhook_secret", secret=True):
+        set_setting("telegram_webhook_secret", secrets.token_urlsafe(24), secret=True)
     if public_url.strip():
         parsed = urlparse(public_url.strip())
         if parsed.scheme == "https" and parsed.netloc:
             set_setting("telegram_public_url", public_url.strip().rstrip("/"))
     set_setting("wecom_message", "Telegram 配置已保存；请将 Webhook 指向 /telegram/callback。")
+    return RedirectResponse("/", 303)
+
+
+@app.post("/telegram/bind-pending")
+def bind_pending_telegram_user():
+    pending = setting("telegram_pending_user", "")
+    if not pending:
+        set_setting("wecom_message", "暂时没有待绑定的 Telegram 用户，请先在机器人中发送 /start。")
+    else:
+        allowed = {item.strip() for item in setting("telegram_admin_users", "").replace("，", ",").split(",") if item.strip()}
+        allowed.add(pending.split("|", 1)[0])
+        set_setting("telegram_admin_users", ",".join(sorted(allowed)))
+        set_setting("telegram_pending_user", "")
+        set_setting("wecom_message", "Telegram 用户已绑定为管理员。")
     return RedirectResponse("/", 303)
 
 
@@ -305,7 +318,14 @@ async def receive_telegram_message(request: Request):
         sender_id = str(message.get("from", {}).get("id") or "")
         if not chat_id or not text:
             return JSONResponse({"ok": True})
-        reply = run_assistant_command(text) if _telegram_sender_allowed(sender_id) else "当前 Telegram 账号未获授权使用运维助手。"
+        if _telegram_sender_allowed(sender_id):
+            reply = run_assistant_command(text)
+        elif text.lower().startswith("/start"):
+            username = str(message.get("from", {}).get("username") or message.get("from", {}).get("first_name") or "未知用户")[:60]
+            set_setting("telegram_pending_user", f"{sender_id}|{username}")
+            reply = "已收到绑定申请，请在平台网页的 Telegram 区域点击“一键批准绑定”。"
+        else:
+            reply = "当前账号未获授权。请先向机器人发送 /start，并由平台管理员在网页中批准绑定。"
         return JSONResponse({"method": "sendMessage", "chat_id": chat_id, "text": reply})
     except Exception:
         return JSONResponse({"ok": False}, 400)
