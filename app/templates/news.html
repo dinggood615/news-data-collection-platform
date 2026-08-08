@@ -158,6 +158,14 @@
 </table>
 </div>
 </section>
+<section class="card">
+<div class="section-title"><span class="icon">AI</span><div><h2>受限运维助手</h2><p class="muted">仅执行平台内置白名单操作，不支持任意系统命令。</p></div></div>
+<form action="/assistant" method="post" class="site-form site-entry">
+<label>操作指令<input name="message" placeholder="例如：查看平台状态、立即采集、查看最近新闻" required></label>
+<button class="accent">发送</button>
+</form>
+{% if assistant_message %}<p class="notice">{{ assistant_message }}</p>{% endif %}
+</section>
 </main>
 <footer>仅采集公开且允许访问的新闻源 · 不绕过登录、付费墙或访问控制</footer>
 </body>

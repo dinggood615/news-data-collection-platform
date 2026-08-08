@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from .database import connect, init_db, now_text, set_setting, setting
+from .database import backup_database, connect, init_db, now_text, set_setting, setting
 from .runner import collect_news, send_wecom_test
 
 app = FastAPI(title="新闻数据采集平台")
@@ -60,7 +60,8 @@ def context() -> dict:
                 "schedule": setting("schedule", "08:00"),
                 "wecom_configured": bool(setting("wecom_webhook", secret=True)),
                 "translation_mode": setting("translation_mode", "argos"),
-                "wecom_message": setting("wecom_message")}
+                "wecom_message": setting("wecom_message"),
+                "assistant_message": setting("assistant_message")}
 
 
 @app.on_event("startup")
@@ -100,6 +101,34 @@ def reschedule():
 
 @app.post("/run")
 def run_now(): scheduler.add_job(run_news, id="manual-news", replace_existing=True); return RedirectResponse("/", 303)
+
+
+@app.post("/assistant")
+def assistant_command(message: str = Form(...)):
+    """A deliberately small, allow-listed operations chat entry point."""
+    text = message.strip()
+    if not text:
+        reply = "请输入操作，例如：查看平台状态、立即采集、查看最近新闻、备份数据库。"
+    elif any(word in text for word in ("状态", "健康", "status", "health")):
+        with connect() as db:
+            sources = db.execute("SELECT COUNT(*) FROM news_sources WHERE enabled=1").fetchone()[0]
+            latest = db.execute("SELECT status, started_at FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+        detail = f"最近任务：{latest['status']}（{latest['started_at']}）" if latest else "尚无运行记录"
+        reply = f"平台在线；已启用新闻源 {sources} 个。{detail}。"
+    elif any(word in text for word in ("采集", "collect", "抓取")):
+        scheduler.add_job(run_news, id="manual-news", replace_existing=True)
+        reply = "已提交一次新闻采集任务，请稍后在“最近运行”查看结果。"
+    elif any(word in text for word in ("最近新闻", "最新新闻", "latest news")):
+        with connect() as db:
+            rows = db.execute("SELECT translated_title,title FROM news_items ORDER BY first_seen_at DESC LIMIT 3").fetchall()
+        reply = "最近新闻：" + ("；".join((row["translated_title"] or row["title"])[:70] for row in rows) if rows else "暂无已入库新闻。")
+    elif any(word in text for word in ("备份", "backup")):
+        path = backup_database(int(setting("backup_retention_days", "14")))
+        reply = f"数据库备份已创建：{path.name}。"
+    else:
+        reply = "仅支持受限操作：查看平台状态、立即采集、查看最近新闻、备份数据库。"
+    set_setting("assistant_message", reply)
+    return RedirectResponse("/", 303)
 
 @app.post("/sources")
 def add_source(name: str = Form(...), url: str = Form(...)):
