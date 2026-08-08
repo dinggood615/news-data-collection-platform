@@ -61,6 +61,9 @@ def context() -> dict:
                 "wecom_configured": bool(setting("wecom_webhook", secret=True)),
                 "translation_mode": setting("translation_mode", "argos"),
                 "wecom_message": setting("wecom_message"),
+                "wecom_app_configured": all((setting("wecom_corp_id", secret=True), setting("wecom_agent_id"),
+                                             setting("wecom_app_secret", secret=True), setting("wecom_callback_token", secret=True),
+                                             setting("wecom_encoding_aes_key", secret=True))),
                 "assistant_message": setting("assistant_message")}
 
 
@@ -226,4 +229,19 @@ def test_wecom():
         set_setting("wecom_message", send_wecom_test())
     except Exception as exc:
         set_setting("wecom_message", f"测试发送失败：{type(exc).__name__}")
+    return RedirectResponse("/", 303)
+
+
+@app.post("/wecom/app-settings")
+def save_wecom_app_settings(corp_id: str = Form(""), agent_id: str = Form(""), app_secret: str = Form(""),
+                            callback_token: str = Form(""), encoding_aes_key: str = Form(""), admin_users: str = Form("")):
+    values = (("wecom_corp_id", corp_id, True), ("wecom_agent_id", agent_id, False),
+              ("wecom_app_secret", app_secret, True), ("wecom_callback_token", callback_token, True),
+              ("wecom_encoding_aes_key", encoding_aes_key, True))
+    for key, value, secret in values:
+        if value.strip():
+            set_setting(key, value.strip(), secret=secret)
+    if admin_users.strip():
+        set_setting("wecom_admin_users", admin_users.strip())
+    set_setting("wecom_message", "企业微信自建应用配置已保存；请在企业微信后台验证回调地址。")
     return RedirectResponse("/", 303)

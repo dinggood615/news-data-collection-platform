@@ -166,6 +166,19 @@
 </form>
 {% if assistant_message %}<p class="notice">{{ assistant_message }}</p>{% endif %}
 </section>
+<section class="card">
+<div class="section-title"><span class="icon">WX</span><div><h2>企业微信自建应用</h2><p class="muted">用于接收企业微信聊天指令；密钥在服务器端加密保存。</p></div></div>
+<p class="muted">回调地址：<code>https://你的域名/wecom/callback</code>。{{ '已完成基础配置。' if wecom_app_configured else '请填写应用参数后到企业微信后台验证。' }}</p>
+<form action="/wecom/app-settings" method="post" class="site-form site-entry">
+<label>CorpID<input name="corp_id" placeholder="企业 ID"></label>
+<label>AgentId<input name="agent_id" placeholder="应用 AgentId"></label>
+<label>应用 Secret<input type="password" name="app_secret" placeholder="留空则不修改"></label>
+<label>回调 Token<input type="password" name="callback_token" placeholder="留空则不修改"></label>
+<label>EncodingAESKey<input type="password" name="encoding_aes_key" placeholder="留空则不修改"></label>
+<label>管理员 UserID<input name="admin_users" placeholder="多个 UserID 用英文逗号分隔"></label>
+<button class="accent">保存企业微信应用配置</button>
+</form>
+</section>
 </main>
 <footer>仅采集公开且允许访问的新闻源 · 不绕过登录、付费墙或访问控制</footer>
 </body>
