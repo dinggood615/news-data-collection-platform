@@ -90,9 +90,16 @@ def init_db() -> None:
             db.execute("INSERT OR IGNORE INTO news_sources(name,url,created_at) VALUES(?,?,?)", (name, url, now_text()))
         for topic, terms in DEFAULT_TERMS.items():
             db.execute("INSERT OR IGNORE INTO topic_terms(topic,terms) VALUES(?,?)", (topic, terms))
-        for key, value in (("admin_username", os.getenv("ADMIN_USERNAME", "admin")), ("schedule", "08:00"),
-                           ("wecom_webhook", os.getenv("WECOM_WEBHOOK", "")), ("translation_mode", "argos")):
-            db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (key, value))
+        for key, value, secret in (("admin_username", os.getenv("ADMIN_USERNAME", "admin"), False), ("schedule", "08:00", False),
+                                   ("wecom_webhook", os.getenv("WECOM_WEBHOOK", ""), True), ("translation_mode", "argos", False),
+                                   ("wecom_corp_id", os.getenv("WECOM_CORP_ID", ""), True), ("wecom_agent_id", os.getenv("WECOM_AGENT_ID", ""), False),
+                                   ("wecom_app_secret", os.getenv("WECOM_APP_SECRET", ""), True), ("wecom_callback_token", os.getenv("WECOM_CALLBACK_TOKEN", ""), True),
+                                   ("wecom_encoding_aes_key", os.getenv("WECOM_ENCODING_AES_KEY", ""), True),
+                                   ("wecom_admin_users", os.getenv("WECOM_ADMIN_USERS", ""), False)):
+            existing = db.execute("SELECT 1 FROM settings WHERE key=?", (key,)).fetchone()
+            if not existing:
+                stored = "enc:" + _cipher().encrypt(value.encode()).decode() if secret and value else value
+                db.execute("INSERT INTO settings(key,value) VALUES(?,?)", (key, stored))
 
 
 def _cipher() -> Fernet:

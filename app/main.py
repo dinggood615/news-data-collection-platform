@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
@@ -103,8 +103,7 @@ def reschedule():
 def run_now(): scheduler.add_job(run_news, id="manual-news", replace_existing=True); return RedirectResponse("/", 303)
 
 
-@app.post("/assistant")
-def assistant_command(message: str = Form(...)):
+def run_assistant_command(message: str) -> str:
     """A deliberately small, allow-listed operations chat entry point."""
     text = message.strip()
     if not text:
@@ -127,8 +126,63 @@ def assistant_command(message: str = Form(...)):
         reply = f"数据库备份已创建：{path.name}。"
     else:
         reply = "仅支持受限操作：查看平台状态、立即采集、查看最近新闻、备份数据库。"
-    set_setting("assistant_message", reply)
+    return reply
+
+
+@app.post("/assistant")
+def assistant_command(message: str = Form(...)):
+    set_setting("assistant_message", run_assistant_command(message))
     return RedirectResponse("/", 303)
+
+
+def _wecom_crypto():
+    from wechatpy.enterprise.crypto import WeChatCrypto
+
+    corp_id = setting("wecom_corp_id", secret=True)
+    token = setting("wecom_callback_token", secret=True)
+    aes_key = setting("wecom_encoding_aes_key", secret=True)
+    if not all((corp_id, token, aes_key)):
+        raise RuntimeError("企业微信自建应用回调尚未配置")
+    return WeChatCrypto(token, aes_key, corp_id)
+
+
+def _wecom_sender_allowed(user_id: str) -> bool:
+    allowed = {item.strip() for item in setting("wecom_admin_users", "").replace("，", ",").split(",") if item.strip()}
+    return bool(allowed) and user_id in allowed
+
+
+@app.get("/wecom/callback")
+def verify_wecom_callback(request: Request):
+    try:
+        crypto = _wecom_crypto()
+        args = request.query_params
+        echo = crypto.check_signature(args["msg_signature"], args["timestamp"], args["nonce"], args["echostr"])
+        return PlainTextResponse(echo)
+    except Exception:
+        return PlainTextResponse("invalid callback", 403)
+
+
+@app.post("/wecom/callback")
+async def receive_wecom_message(request: Request):
+    """Receive encrypted Enterprise WeChat messages and only run approved actions."""
+    try:
+        from wechatpy.enterprise import create_reply, parse_message
+
+        crypto = _wecom_crypto()
+        args = request.query_params
+        decrypted = crypto.decrypt_message(await request.body(), args["msg_signature"], args["timestamp"], args["nonce"])
+        message = parse_message(decrypted)
+        if getattr(message, "type", "") != "text":
+            reply_text = "仅支持文本指令：状态、采集、最近新闻、备份。"
+        elif not _wecom_sender_allowed(message.source):
+            reply_text = "当前账号未获授权使用运维助手。"
+        else:
+            reply_text = run_assistant_command(message.content)
+        reply_xml = create_reply(reply_text, message).render()
+        encrypted = crypto.encrypt_message(reply_xml, args["nonce"], args["timestamp"])
+        return Response(encrypted, media_type="application/xml")
+    except Exception:
+        return PlainTextResponse("invalid callback", 403)
 
 @app.post("/sources")
 def add_source(name: str = Form(...), url: str = Form(...)):
