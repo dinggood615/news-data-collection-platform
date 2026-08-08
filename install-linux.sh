@@ -93,7 +93,14 @@ else
   NGINX_SITE=/etc/nginx/conf.d/news-platform.conf
   install -m 644 "$INSTALL_DIR/nginx/tender-platform.conf" "$NGINX_SITE"
 fi
-sed -i "s/listen 5555 ssl;/listen $PUBLIC_PORT ssl;/" "$NGINX_SITE"
+# Telegram Webhook only supports standard HTTPS ports and the bundled Nginx
+# configuration always keeps 443.  Avoid writing the same listen directive
+# twice when the dashboard is explicitly configured for 443.
+if [ "$PUBLIC_PORT" != "443" ]; then
+  sed -i "s/listen 5555 ssl;/listen $PUBLIC_PORT ssl;/" "$NGINX_SITE"
+else
+  sed -i '/listen 5555 ssl;/d' "$NGINX_SITE"
+fi
 nginx -t
 systemctl daemon-reload
 systemctl enable --now news-platform.service

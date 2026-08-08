@@ -21,7 +21,7 @@
 curl -fsSL https://raw.githubusercontent.com/dinggood615/news-data-collection-platform/main/install-linux.sh | sudo bash -s -- https://github.com/dinggood615/news-data-collection-platform.git
 ```
 
-默认 HTTPS 端口为 `5555`。更换端口：
+默认 HTTPS 端口为 `5555`；安装器也会同时监听标准 HTTPS `443`，供 Telegram Webhook 使用。更换仪表盘端口：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dinggood615/news-data-collection-platform/main/install-linux.sh | sudo env PORT=8443 bash -s -- https://github.com/dinggood615/news-data-collection-platform.git
@@ -36,6 +36,14 @@ curl -fsSL https://raw.githubusercontent.com/dinggood615/news-data-collection-pl
 3. 在“企业微信与翻译”填写企业微信机器人 Webhook，并设定每日汇总时间。
 4. 本地免费翻译服务默认地址为 `http://127.0.0.1:5000/translate`；配置 LibreTranslate 后会自动使用。未配置时保留原文。
 5. 点击“立即采集”执行首次测试。
+
+### Telegram 绑定
+
+Telegram 通过 Webhook 接收命令，因此必须准备一个已解析到服务器的域名和有效 HTTPS 证书；不要填写 IP 地址或 `:5555` 端口。平台会在标准 `443` 端口接收 `https://<域名>/telegram/callback`，该路径仅校验 Telegram 的秘密请求头，不会暴露后台页面。
+
+1. 在“Telegram 机器人”填入 BotFather 生成的 Token 和 `https://<你的域名>`，保存后点击“配置 Telegram Webhook”。
+2. 在机器人会话中发送**准确的** `/start`。
+3. 回到平台点击“一键批准绑定”；之后可从 Telegram 发送“状态”“立即采集”“最新新闻”或“备份”。
 
 ## 一键卸载
 
