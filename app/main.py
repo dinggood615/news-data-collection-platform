@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hmac
+import json
 import os
 import secrets
 from datetime import datetime
@@ -30,7 +32,7 @@ def serializer() -> URLSafeTimedSerializer:
 
 @app.middleware("http")
 async def admin_only(request: Request, call_next):
-    if request.url.path in {"/healthz", "/wecom/callback"} or request.url.path.startswith("/static/"):
+    if request.url.path in {"/healthz", "/wecom/callback", "/telegram/callback"} or request.url.path.startswith("/static/"):
         return await call_next(request)
     username = setting("admin_username", os.getenv("ADMIN_USERNAME", "admin"))
     password = setting("admin_password", os.getenv("ADMIN_PASSWORD", "admin"), secret=True)
@@ -245,3 +247,43 @@ def save_wecom_app_settings(corp_id: str = Form(""), agent_id: str = Form(""), a
         set_setting("wecom_admin_users", admin_users.strip())
     set_setting("wecom_message", "企业微信自建应用配置已保存；请在企业微信后台验证回调地址。")
     return RedirectResponse("/", 303)
+
+
+@app.post("/telegram/settings")
+def save_telegram_settings(bot_token: str = Form(""), webhook_secret: str = Form(""), admin_users: str = Form("")):
+    if bot_token.strip():
+        set_setting("telegram_bot_token", bot_token.strip(), secret=True)
+    if webhook_secret.strip():
+        set_setting("telegram_webhook_secret", webhook_secret.strip(), secret=True)
+    elif not setting("telegram_webhook_secret", secret=True):
+        set_setting("telegram_webhook_secret", secrets.token_urlsafe(24), secret=True)
+    if admin_users.strip():
+        set_setting("telegram_admin_users", admin_users.strip())
+    set_setting("wecom_message", "Telegram 配置已保存；请将 Webhook 指向 /telegram/callback。")
+    return RedirectResponse("/", 303)
+
+
+def _telegram_sender_allowed(user_id: str) -> bool:
+    allowed = {item.strip() for item in setting("telegram_admin_users", "").replace("，", ",").split(",") if item.strip()}
+    return bool(allowed) and user_id in allowed
+
+
+@app.post("/telegram/callback")
+async def receive_telegram_message(request: Request):
+    """Telegram webhook; the secret header and chat-id allowlist gate every operation."""
+    expected = setting("telegram_webhook_secret", secret=True)
+    supplied = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not expected or not hmac.compare_digest(supplied, expected):
+        return JSONResponse({"ok": False}, 403)
+    try:
+        update = await request.json()
+        message = update.get("message") or {}
+        text = str(message.get("text") or "").strip()
+        chat_id = message.get("chat", {}).get("id")
+        sender_id = str(message.get("from", {}).get("id") or "")
+        if not chat_id or not text:
+            return JSONResponse({"ok": True})
+        reply = run_assistant_command(text) if _telegram_sender_allowed(sender_id) else "当前 Telegram 账号未获授权使用运维助手。"
+        return JSONResponse({"method": "sendMessage", "chat_id": chat_id, "text": reply})
+    except Exception:
+        return JSONResponse({"ok": False}, 400)

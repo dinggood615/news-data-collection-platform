@@ -179,6 +179,16 @@
 <button class="accent">保存企业微信应用配置</button>
 </form>
 </section>
+<section class="card">
+<div class="section-title"><span class="icon">TG</span><div><h2>Telegram 机器人</h2><p class="muted">用于接收 TG 聊天指令；Token 仅加密保存在服务器端。</p></div></div>
+<p class="muted">Webhook 地址：<code>https://你的域名/telegram/callback</code></p>
+<form action="/telegram/settings" method="post" class="site-form site-entry">
+<label>Bot Token<input type="password" name="bot_token" placeholder="从 @BotFather 获取；留空则不修改"></label>
+<label>Webhook Secret<input type="password" name="webhook_secret" placeholder="留空时自动生成"></label>
+<label>管理员 TG User ID<input name="admin_users" placeholder="多个 ID 用英文逗号分隔"></label>
+<button class="accent">保存 Telegram 配置</button>
+</form>
+</section>
 </main>
 <footer>仅采集公开且允许访问的新闻源 · 不绕过登录、付费墙或访问控制</footer>
 </body>
