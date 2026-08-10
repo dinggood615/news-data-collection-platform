@@ -40,3 +40,24 @@ jobs:
           with TestClient(app) as client:
               assert client.get('/healthz').status_code == 200
           PY
+      - name: Verify custom topic management
+        run: |
+          export DATABASE_PATH="$RUNNER_TEMP/topics.sqlite3"
+          python - <<'PY'
+          from urllib.parse import quote
+          from fastapi.testclient import TestClient
+          from app.database import connect, init_db
+          from app.main import app
+          init_db()
+          with TestClient(app) as client:
+              auth = ('admin', 'admin')
+              response = client.post('/topics', data={'name': '人工智能', 'terms': 'AI,ai；大模型\nOpenAI'}, auth=auth, follow_redirects=False)
+              assert response.status_code == 303
+              with connect() as db:
+                  row = db.execute("SELECT * FROM topic_terms WHERE topic='人工智能'").fetchone()
+                  assert row and row['terms'] == 'AI,大模型,OpenAI' and row['enabled'] == 1
+              response = client.post('/topics/' + quote('人工智能') + '/delete', auth=auth, follow_redirects=False)
+              assert response.status_code == 303
+              with connect() as db:
+                  assert db.execute("SELECT 1 FROM topic_terms WHERE topic='人工智能'").fetchone() is None
+          PY

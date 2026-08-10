@@ -77,11 +77,17 @@
   <div class="split" id="automation">
     <section class="panel">
       <div class="panel-head compact"><div><span class="section-kicker">FILTERS</span><h2>主题与关键词</h2><p>标题或摘要命中任一关键词即可入库。</p></div></div>
-      <div class="stack">{% for topic in topics %}<form action="/topics/{{ topic.topic }}" method="post" class="topic-row">
+      <form action="/topics" method="post" class="topic-add">
+        <label>新主题<input name="name" maxlength="30" placeholder="例如：人工智能" required></label>
+        <label>关键词<input name="terms" placeholder="AI,大模型,人工智能,OpenAI" required></label>
+        <button class="primary">添加主题</button>
+      </form>
+      <p class="field-help">支持中英文逗号、分号或换行分隔；系统会自动清理重复关键词。</p>
+      <div class="stack topic-list">{% for topic in topics %}<div class="topic-item"><form action="/topics/{{ topic.topic }}" method="post" class="topic-row">
         <label class="check"><input type="checkbox" name="enabled" value="1" {% if topic.enabled %}checked{% endif %}><span>{{ topic.topic }}</span></label>
         <input name="terms" value="{{ topic.terms }}" aria-label="{{ topic.topic }}关键词">
         <button>保存</button>
-      </form>{% endfor %}</div>
+      </form><form action="/topics/{{ topic.topic }}/delete" method="post" onsubmit="return confirm('确定删除主题“{{ topic.topic }}”及其关键词吗？')"><button class="danger topic-delete" aria-label="删除主题 {{ topic.topic }}">删除</button></form></div>{% endfor %}</div>
     </section>
 
     <section class="panel">
