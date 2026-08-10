@@ -5,6 +5,7 @@ import base64
 import hmac
 import json
 import os
+import re
 import secrets
 from datetime import datetime
 from urllib.parse import urlencode, urlparse
@@ -235,8 +236,39 @@ def delete_source(source_id: int):
 
 @app.post("/topics/{topic}")
 def save_topic(topic: str, terms: str = Form(...), enabled: str = Form("0")):
-    with connect() as db: db.execute("UPDATE topic_terms SET terms=?,enabled=? WHERE topic=?", (terms.strip(), 1 if enabled == "1" else 0, topic))
+    normalized_terms = _normalize_terms(terms)
+    if normalized_terms:
+        with connect() as db: db.execute("UPDATE topic_terms SET terms=?,enabled=? WHERE topic=?", (normalized_terms, 1 if enabled == "1" else 0, topic))
     return RedirectResponse("/", 303)
+
+
+def _normalize_terms(value: str) -> str:
+    """Normalize Chinese/English separators and remove duplicate filter terms."""
+    unique: list[str] = []
+    seen: set[str] = set()
+    for term in re.split(r"[,，\n;；]+", value):
+        cleaned = " ".join(term.strip().split())[:80]
+        key = cleaned.casefold()
+        if cleaned and key not in seen:
+            unique.append(cleaned)
+            seen.add(key)
+    return ",".join(unique[:100])
+
+
+@app.post("/topics")
+def add_topic(name: str = Form(...), terms: str = Form(...)):
+    topic = re.sub(r"[/\\?#%]+", " ", " ".join(name.strip().split()))[:30].strip()
+    normalized_terms = _normalize_terms(terms)
+    if topic and normalized_terms:
+        with connect() as db:
+            db.execute("INSERT OR IGNORE INTO topic_terms(topic,terms,enabled) VALUES(?,?,1)", (topic, normalized_terms))
+    return RedirectResponse("/#automation", 303)
+
+
+@app.post("/topics/{topic}/delete")
+def delete_topic(topic: str):
+    with connect() as db: db.execute("DELETE FROM topic_terms WHERE topic=?", (topic,))
+    return RedirectResponse("/#automation", 303)
 
 @app.post("/settings")
 def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), translation_mode: str = Form("argos")):
