@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 import feedparser
 from langdetect import DetectorFactory, LangDetectException, detect
 
-from .database import connect, now_text, setting
+from .database import connect, create_digest_report, now_text, setting
 
 DetectorFactory.seed = 0
 
@@ -90,44 +90,55 @@ def translate(text: str) -> str:
     return translated or text
 
 
-def _wecom_markdown(items: list[dict]) -> str:
-    sections = [f"# 国际新闻快报 · {datetime.now().astimezone():%Y-%m-%d %H:%M}"]
+def _wecom_markdown(items: list[dict], report_url: str) -> str:
+    topic_counts: dict[str, int] = {}
     for item in items:
+        topics_value = item.get("topics", "")
+        topics_list = topics_value if isinstance(topics_value, (list, tuple, set)) else str(topics_value).split(",")
+        for topic in topics_list:
+            if topic.strip():
+                topic_counts[topic.strip()] = topic_counts.get(topic.strip(), 0) + 1
+    count_text = " · ".join(f"{topic}{count}" for topic, count in sorted(topic_counts.items(), key=lambda pair: pair[1], reverse=True))
+    sections = [f"# 国际新闻日报 · {datetime.now().astimezone():%Y-%m-%d %H:%M}", f"> 本次新增 **{len(items)}** 条  {count_text}"]
+    headline_count = max(1, min(int(setting("digest_headline_count", "5")), 10))
+    for index, item in enumerate(sorted(items, key=lambda row: row.get("priority", 0), reverse=True)[:headline_count], 1):
         topics = _topic_text(item["topics"])
         title = item["translated_title"] or item["title"]
-        summary = (item["translated_summary"] or item["summary"]).replace("\n", " ")[:180]
-        sections.append(f"**【{topics}】**\n**{title[:100]}**\n> {summary}\n来源：{item['source']} · [阅读原文]({item['url']})")
-    return "\n\n---\n\n".join(sections)
+        sections.append(f"**{index}. 【{topics}】{title[:90]}**\n> {item['source']}")
+    sections.append(f"[查看全部 {len(items)} 条新闻（免登录）]({report_url})")
+    return "\n\n".join(sections)
 
 
 def send_wecom(items: list[dict]) -> str:
     webhook = setting("wecom_webhook", secret=True)
     if not webhook or not items: return "企业微信未配置或没有新增新闻"
-    # WeCom markdown payloads have a practical size limit; split conservatively.
-    chunks, current = [], []
-    for item in items:
-        candidate = _wecom_markdown(current + [item])
-        if len(candidate.encode()) > 3500 and current:
-            chunks.append(current); current = [item]
-        else: current.append(item)
-    if current: chunks.append(current)
-    for chunk in chunks:
-        body = json.dumps({"msgtype": "markdown", "markdown": {"content": _wecom_markdown(chunk)}}).encode()
-        request = Request(webhook, data=body, headers={"Content-Type": "application/json"}, method="POST")
-        with urlopen(request, timeout=20) as response:
-            if json.loads(response.read().decode()).get("errcode") != 0: raise RuntimeError("企业微信机器人拒绝消息")
-    return f"企业微信已推送 {len(items)} 条新闻"
+    public_url = (setting("digest_public_url") or setting("wecom_public_url") or setting("telegram_public_url")).rstrip("/")
+    if not public_url.startswith("https://"):
+        return "企业微信未推送：请先填写日报 HTTPS 公网地址"
+    retention = max(1, min(int(setting("digest_retention_days", "7")), 30))
+    token = create_digest_report([item["fingerprint"] for item in items], retention)
+    report_url = f"{public_url}/digest/{token}"
+    content = _wecom_markdown(items, report_url)
+    body = json.dumps({"msgtype": "markdown", "markdown": {"content": content}}, ensure_ascii=False).encode()
+    request = Request(webhook, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    with urlopen(request, timeout=20) as response:
+        if json.loads(response.read().decode()).get("errcode") != 0: raise RuntimeError("企业微信机器人拒绝消息")
+    return f"企业微信已发送 1 条汇总，包含 {len(items)} 条新闻"
 
 
 def send_wecom_test() -> str:
     """Send one non-persistent sample card to validate the configured webhook."""
     sample = {
+        "fingerprint": hashlib.sha256(b"wecom-test-digest").hexdigest(),
         "source": "新闻数据采集平台", "title": "WeCom notification test",
         "translated_title": "企业微信推送测试成功", "summary": "This is a test message.",
         "translated_summary": "这是一条测试消息。企业微信机器人已成功接收新闻平台推送。",
         "url": "https://github.com/dinggood615/news-data-collection-platform",
         "topics": "科技,经济",
     }
+    with connect() as db:
+        db.execute("""INSERT OR IGNORE INTO news_items(fingerprint,source,title,translated_title,summary,translated_summary,url,published_at,topics,priority,first_seen_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?)""", (sample["fingerprint"], sample["source"], sample["title"], sample["translated_title"], sample["summary"], sample["translated_summary"], sample["url"], now_text(), sample["topics"], 2, now_text()))
     return send_wecom([sample])
 
 
@@ -158,6 +169,6 @@ def collect_news() -> tuple[int, int, str]:
             if cursor.rowcount:
                 translated_title, translated_summary = translate(item["title"]), translate(item["summary"])
                 db.execute("""UPDATE news_items SET translated_title=?,translated_summary=? WHERE fingerprint=?""", (translated_title, translated_summary, fingerprint))
-                item.update(translated_title=translated_title, translated_summary=translated_summary); new_items.append(item)
+                item.update(fingerprint=fingerprint, priority=len(item["topics"]), translated_title=translated_title, translated_summary=translated_summary); new_items.append(item)
     message = send_wecom(new_items)
     return collected, len(new_items), "; ".join(warnings + [message])

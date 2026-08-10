@@ -4,6 +4,8 @@ import base64
 import hashlib
 import os
 import sqlite3
+import json
+import secrets
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -85,6 +87,11 @@ def init_db() -> None:
           status TEXT NOT NULL, collected_count INTEGER NOT NULL DEFAULT 0,
           new_count INTEGER NOT NULL DEFAULT 0, message TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS digest_reports (
+          token_hash TEXT PRIMARY KEY, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+          item_fingerprints TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_digest_reports_expires ON digest_reports(expires_at);
         """)
         for name, url in DEFAULT_SOURCES:
             db.execute("INSERT OR IGNORE INTO news_sources(name,url,created_at) VALUES(?,?,?)", (name, url, now_text()))
@@ -105,6 +112,41 @@ def init_db() -> None:
             if not existing:
                 stored = "enc:" + _cipher().encrypt(value.encode()).decode() if secret and value else value
                 db.execute("INSERT INTO settings(key,value) VALUES(?,?)", (key, stored))
+        for key, value in (("digest_public_url", os.getenv("DIGEST_PUBLIC_URL", "")),
+                           ("digest_retention_days", "7"), ("digest_headline_count", "5")):
+            db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (key, value))
+
+
+def create_digest_report(fingerprints: list[str], retention_days: int) -> str:
+    """Create an unguessable, read-only snapshot and return its bearer token."""
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    created = datetime.now().astimezone()
+    expires = created.timestamp() + max(1, min(retention_days, 30)) * 86400
+    with connect() as db:
+        db.execute("DELETE FROM digest_reports WHERE expires_at < ? OR revoked=1", (created.isoformat(timespec="seconds"),))
+        db.execute("INSERT INTO digest_reports(token_hash,created_at,expires_at,item_fingerprints) VALUES(?,?,?,?)",
+                   (token_hash, created.isoformat(timespec="seconds"),
+                    datetime.fromtimestamp(expires, created.tzinfo).isoformat(timespec="seconds"),
+                    json.dumps(list(dict.fromkeys(fingerprints)))))
+    return token
+
+
+def read_digest_report(token: str) -> tuple[dict | None, list[dict]]:
+    if not token or len(token) > 200:
+        return None, []
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    with connect() as db:
+        report = db.execute("SELECT * FROM digest_reports WHERE token_hash=? AND revoked=0 AND expires_at>=?", (token_hash, now)).fetchone()
+        if not report:
+            return None, []
+        fingerprints = json.loads(report["item_fingerprints"])
+        if not fingerprints:
+            return dict(report), []
+        placeholders = ",".join("?" for _ in fingerprints)
+        rows = db.execute(f"SELECT * FROM news_items WHERE fingerprint IN ({placeholders}) ORDER BY priority DESC,first_seen_at DESC", fingerprints).fetchall()
+    return dict(report), [dict(row) for row in rows]
 
 
 def _cipher() -> Fernet:

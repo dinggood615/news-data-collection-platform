@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from .database import backup_database, connect, init_db, now_text, set_setting, setting
+from .database import backup_database, connect, init_db, now_text, read_digest_report, set_setting, setting
 from .runner import collect_news, send_wecom_test
 
 app = FastAPI(title="新闻数据采集平台")
@@ -35,7 +35,7 @@ def serializer() -> URLSafeTimedSerializer:
 
 @app.middleware("http")
 async def admin_only(request: Request, call_next):
-    if request.url.path in {"/healthz", "/wecom/callback", "/telegram/callback"} or request.url.path.startswith("/static/"):
+    if request.url.path in {"/healthz", "/wecom/callback", "/telegram/callback"} or request.url.path.startswith(("/static/", "/digest/")):
         return await call_next(request)
     username = setting("admin_username", os.getenv("ADMIN_USERNAME", "admin"))
     password = setting("admin_password", os.getenv("ADMIN_PASSWORD", "admin"), secret=True)
@@ -77,6 +77,9 @@ def context() -> dict:
                 "schedule": setting("schedule", "08:00"),
                 "wecom_configured": bool(setting("wecom_webhook", secret=True)),
                 "translation_mode": setting("translation_mode", "argos"),
+                "digest_public_url": setting("digest_public_url"),
+                "digest_retention_days": setting("digest_retention_days", "7"),
+                "digest_headline_count": setting("digest_headline_count", "5"),
                 "wecom_message": setting("wecom_message"),
                 "wecom_app_configured": all((setting("wecom_corp_id", secret=True), setting("wecom_callback_token", secret=True),
                                              setting("wecom_encoding_aes_key", secret=True), setting("wecom_public_url", ""),
@@ -96,6 +99,19 @@ def shutdown(): scheduler.shutdown(wait=False)
 
 @app.get("/")
 def home(request: Request): return templates.TemplateResponse(request, "news.html", context())
+
+
+@app.get("/digest/{token}")
+def public_digest(request: Request, token: str):
+    report, items = read_digest_report(token)
+    if not report:
+        return templates.TemplateResponse(request, "digest.html", {"expired": True, "items": [], "topics": {}}, status_code=404)
+    topics: dict[str, int] = {}
+    for item in items:
+        for topic in item["topics"].split(","):
+            if topic.strip():
+                topics[topic.strip()] = topics.get(topic.strip(), 0) + 1
+    return templates.TemplateResponse(request, "digest.html", {"expired": False, "report": report, "items": items, "topics": topics})
 
 @app.get("/healthz")
 def healthz():
@@ -271,8 +287,17 @@ def delete_topic(topic: str):
     return RedirectResponse("/#automation", 303)
 
 @app.post("/settings")
-def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), translation_mode: str = Form("argos")):
+def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), translation_mode: str = Form("argos"),
+                  digest_public_url: str = Form(""), digest_retention_days: int = Form(7), digest_headline_count: int = Form(5)):
+    digest_url = digest_public_url.strip().rstrip("/")
+    parsed_digest = urlparse(digest_url) if digest_url else None
+    if not parsed_digest or parsed_digest.scheme != "https" or not parsed_digest.netloc or parsed_digest.path not in {"", "/"}:
+        set_setting("wecom_message", "日报公网地址必须是 HTTPS 根地址，例如 https://news.example.com。")
+        return RedirectResponse("/#automation", 303)
     set_setting("schedule", schedule); set_setting("translation_mode", translation_mode)
+    set_setting("digest_public_url", digest_url)
+    set_setting("digest_retention_days", str(max(1, min(digest_retention_days, 30))))
+    set_setting("digest_headline_count", str(max(1, min(digest_headline_count, 10))))
     if wecom_webhook.strip():
         parsed = urlparse(wecom_webhook.strip())
         valid_webhook = (parsed.scheme == "https" and parsed.netloc == "qyapi.weixin.qq.com"

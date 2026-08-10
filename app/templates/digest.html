@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>国际新闻日报</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="digest-body">
+<main class="digest-shell">
+  {% if expired %}
+  <section class="digest-hero"><span class="section-kicker">READ-ONLY DIGEST</span><h1>日报链接已失效</h1><p>该链接已过期、撤销或不存在。请从最新企业微信消息重新打开。</p></section>
+  {% else %}
+  <section class="digest-hero"><span class="section-kicker">GLOBAL NEWS INTELLIGENCE</span><h1>国际新闻日报</h1><p>共收录 {{ items|length }} 条新闻 · 生成于 {{ report.created_at }} · 链接有效至 {{ report.expires_at }}</p></section>
+  <nav class="digest-topics"><button type="button" data-topic="all" class="active">全部 {{ items|length }}</button>{% for topic,count in topics.items() %}<button type="button" data-topic="{{ topic }}">{{ topic }} {{ count }}</button>{% endfor %}</nav>
+  <label class="digest-search">搜索日报<input id="digest-search" type="search" placeholder="输入标题、摘要或媒体名称"></label>
+  <section class="digest-list" id="digest-list">
+    {% for item in items %}<article class="digest-item" data-topics="{{ item.topics }}"><div class="digest-meta"><span>{{ item.topics }}</span><time>{{ item.published_at or item.first_seen_at }}</time></div><h2>{{ item.translated_title or item.title }}</h2>{% if item.translated_title and item.translated_title != item.title %}<p class="original-title">{{ item.title }}</p>{% endif %}<p>{{ item.translated_summary or item.summary or '原始新闻源未提供摘要。' }}</p><footer><strong>{{ item.source }}</strong><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">阅读原文 →</a></footer></article>{% endfor %}
+  </section>
+  <p id="digest-empty" class="empty" hidden>没有符合当前筛选条件的新闻。</p>
+  {% endif %}
+</main>
+<script>
+(() => {
+  const search = document.querySelector('#digest-search');
+  const cards = [...document.querySelectorAll('.digest-item')];
+  const buttons = [...document.querySelectorAll('[data-topic]')];
+  const empty = document.querySelector('#digest-empty');
+  let topic = 'all';
+  function filter() {
+    const query = (search?.value || '').trim().toLowerCase();
+    let visible = 0;
+    cards.forEach(card => {
+      const matchesTopic = topic === 'all' || card.dataset.topics.split(',').includes(topic);
+      const matchesText = !query || card.textContent.toLowerCase().includes(query);
+      card.hidden = !(matchesTopic && matchesText);
+      if (!card.hidden) visible++;
+    });
+    if (empty) empty.hidden = visible !== 0;
+  }
+  search?.addEventListener('input', filter);
+  buttons.forEach(button => button.addEventListener('click', () => {
+    topic = button.dataset.topic;
+    buttons.forEach(item => item.classList.toggle('active', item === button));
+    filter();
+  }));
+})();
+</script>
+</body>
+</html>

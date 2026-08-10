@@ -95,8 +95,10 @@
       <form action="/settings" method="post" class="form-stack">
         <label>每日汇总时间<input type="time" name="schedule" value="{{ schedule }}" required></label>
         <label>企业微信机器人 Webhook<input type="password" name="wecom_webhook" placeholder="{% if wecom_configured %}已保存；留空则不修改{% else %}https://qyapi.weixin.qq.com/…{% endif %}"></label>
+        <label>日报 HTTPS 公网地址<input type="url" name="digest_public_url" value="{{ digest_public_url }}" placeholder="https://news.example.com" required><span class="field-help">企业微信只发送一条汇总；点击该地址生成的随机只读链接查看全部新闻，无需登录后台。</span></label>
+        <div class="topic-add"><label>日报链接有效天数<input type="number" name="digest_retention_days" value="{{ digest_retention_days }}" min="1" max="30" required></label><label>消息中显示头条数<input type="number" name="digest_headline_count" value="{{ digest_headline_count }}" min="1" max="10" required></label></div>
         <label>翻译模式<select name="translation_mode"><option value="argos" {% if translation_mode == 'argos' %}selected{% endif %}>本地 LibreTranslate / Argos（免费）</option><option value="off" {% if translation_mode == 'off' %}selected{% endif %}>保留原文</option></select></label>
-        <button class="primary">保存自动化设置</button>
+        <button class="primary">保存单条汇总推送设置</button>
       </form>
       <form action="/wecom/test" method="post" class="inline-action"><button>发送企业微信测试消息</button></form>
       {% if wecom_message %}<p class="notice">{{ wecom_message }}</p>{% endif %}
