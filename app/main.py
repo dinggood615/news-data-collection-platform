@@ -57,10 +57,22 @@ async def admin_only(request: Request, call_next):
 
 def context() -> dict:
     with connect() as db:
-        return {"sources": db.execute("SELECT * FROM news_sources ORDER BY id").fetchall(),
-                "topics": db.execute("SELECT * FROM topic_terms ORDER BY topic").fetchall(),
-                "items": db.execute("SELECT * FROM news_items ORDER BY first_seen_at DESC LIMIT 80").fetchall(),
-                "runs": db.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 10").fetchall(),
+        sources = db.execute("SELECT * FROM news_sources ORDER BY id").fetchall()
+        topics = db.execute("SELECT * FROM topic_terms ORDER BY topic").fetchall()
+        items = db.execute("SELECT * FROM news_items ORDER BY first_seen_at DESC LIMIT 80").fetchall()
+        runs = db.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 10").fetchall()
+        total_news = db.execute("SELECT COUNT(*) FROM news_items").fetchone()[0]
+        today_news = db.execute(
+            "SELECT COUNT(*) FROM news_items WHERE date(first_seen_at)=date('now','localtime')"
+        ).fetchone()[0]
+        return {"sources": sources,
+                "topics": topics,
+                "items": items,
+                "runs": runs,
+                "enabled_sources": sum(1 for source in sources if source["enabled"]),
+                "enabled_topics": sum(1 for topic in topics if topic["enabled"]),
+                "total_news": total_news,
+                "today_news": today_news,
                 "schedule": setting("schedule", "08:00"),
                 "wecom_configured": bool(setting("wecom_webhook", secret=True)),
                 "translation_mode": setting("translation_mode", "argos"),

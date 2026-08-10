@@ -1,203 +1,132 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>新闻数据采集平台</title>
-<link rel="stylesheet" href="/static/app.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>新闻数据采集平台</title>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<header class="hero">
-<div class="brand">
-<span class="brand-mark">N</span>
-<div>
-<h1>新闻数据采集平台</h1>
-<p>公开新闻源 · 中文翻译 · 主题筛选 · 企业微信自动推送</p>
-</div>
-</div>
-<form action="/run" method="post">
-<button class="primary">立即采集</button>
-</form>
+<header class="topbar">
+  <a class="brand" href="#overview" aria-label="返回平台概览">
+    <span class="brand-mark">N</span>
+    <span><b>新闻数据采集平台</b><small>NEWS INTELLIGENCE</small></span>
+  </a>
+  <nav aria-label="页面导航">
+    <a href="#news">新闻</a><a href="#sources">来源</a><a href="#automation">自动化</a><a href="#assistants">助手</a>
+  </nav>
+  <form action="/run" method="post"><button class="primary">立即采集</button></form>
 </header>
+
 <main>
-<section class="card">
-<div class="section-title">
-<span class="icon">▤</span>
-<div>
-<h2>采集结果</h2>
-<p class="muted">仅显示命中主题规则的新闻；中文内容由本地免费翻译服务自动生成。</p>
-</div>
-</div>
-<div class="table-wrap">
-<table>
-<thead>
-<tr>
-<th>主题</th>
-<th>中文标题</th>
-<th>来源</th>
-<th>时间</th>
-</tr>
-</thead>
-<tbody>{% for item in items %}<tr>
-<td>
-<span class="badge ready">{{ item.topics }}</span>
-</td>
-<td>
-<a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.translated_title or item.title }}</a>
-<small class="url">{{ item.translated_summary or item.summary }}</small>
-</td>
-<td>{{ item.source }}</td>
-<td>{{ item.published_at }}</td>
-</tr>{% else %}<tr>
-<td colspan="4" class="empty">暂无符合主题规则的新闻。点击“立即采集”开始。</td>
-</tr>{% endfor %}</tbody>
-</table>
-</div>
-</section>
-<section class="card">
-<div class="section-title">
-<span class="icon">◎</span>
-<div>
-<h2>国际新闻源</h2>
-<p class="muted">默认提供公开 RSS 新闻源；可添加明确允许访问的 RSS 或 API 地址。</p>
-</div>
-</div>
-<form action="/sources" method="post" class="site-form site-entry">
-<label>来源名称<input name="name" placeholder="例如：BBC Technology" required>
-</label>
-<label>RSS / API 地址<input type="url" name="url" placeholder="https://example.com/rss.xml" required>
-</label>
-<button class="accent">添加新闻源</button>
-</form>
-<div class="custom-list">{% for source in sources %}<article class="custom-site">
-<div class="custom-head">
-<div>
-<b>{{ source.name }}</b>
-<a class="url" href="{{ source.url }}" target="_blank">{{ source.url }}</a>
-</div>
-<span class="badge {{ 'ready' if source.enabled else 'pending' }}">{{ '已启用' if source.enabled else '已停用' }}</span>
-</div>
-<div class="actions">
-<form action="/sources/{{ source.id }}/toggle" method="post">
-<button>{{ '停用' if source.enabled else '启用' }}</button>
-</form>
-<form action="/sources/{{ source.id }}/delete" method="post" onsubmit="return confirm('确定删除此新闻源？')">
-<button class="danger">删除</button>
-</form>
-</div>
-</article>{% endfor %}</div>
-</section>
-<section class="card two">
-<div>
-<div class="section-title">
-<span class="icon">⌕</span>
-<div>
-<h2>主题与关键词</h2>
-<p class="muted">标题和摘要命中任一关键词即入库，可同时命中多个主题。</p>
-</div>
-</div>{% for topic in topics %}<form action="/topics/{{ topic.topic }}" method="post" class="settings">
-<label>
-<input type="checkbox" name="enabled" value="1" {% if topic.enabled %}checked{% endif %}> {{ topic.topic }}</label>
-<input name="terms" value="{{ topic.terms }}">
-<button>保存{{ topic.topic }}规则</button>
-</form>{% endfor %}</div>
-<div>
-<div class="section-title">
-<span class="icon">◈</span>
-<div>
-<h2>企业微信与翻译</h2>
-<p class="muted">企业微信以 Markdown 分段推送；Webhook 和翻译服务仅保存在服务器。</p>
-</div>
-</div>
-<form action="/settings" method="post" class="settings">
-<label>每日汇总时间<input type="time" name="schedule" value="{{ schedule }}" required>
-</label>
-<label>企业微信机器人 Webhook<input type="password" name="wecom_webhook" placeholder="{% if wecom_configured %}已保存；留空则不修改{% else %}https://qyapi.weixin.qq.com/...{% endif %}">
-</label>
-<label>翻译模式<select name="translation_mode">
-<option value="argos" {% if translation_mode == 'argos' %}selected{% endif %}>本地 LibreTranslate / Argos（免费）</option>
-<option value="off" {% if translation_mode == 'off' %}selected{% endif %}>保留原文</option>
-</select>
-</label>
-<button class="accent">保存自动化设置</button>
-</form>
-<form action="/wecom/test" method="post" class="actions">
-<button type="submit">发送企业微信测试消息</button>
-</form>
-{% if wecom_message %}<p class="notice">{{ wecom_message }}</p>{% endif %}
-</div>
-</section>
-<section class="card">
-<div class="section-title">
-<span class="icon">◷</span>
-<div>
-<h2>最近运行</h2>
-<p class="muted">采集、翻译与推送错误会在此保留。</p>
-</div>
-</div>
-<div class="table-wrap">
-<table>
-<thead>
-<tr>
-<th>开始时间</th>
-<th>状态</th>
-<th>命中 / 新增</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>{% for run in runs %}<tr>
-<td>{{ run.started_at }}</td>
-<td>
-<span class="status {{ run.status }}">{{ run.status }}</span>
-</td>
-<td>{{ run.collected_count }} / {{ run.new_count }}</td>
-<td>{{ run.message }}</td>
-</tr>{% else %}<tr>
-<td colspan="4" class="empty">尚无运行记录。</td>
-</tr>{% endfor %}</tbody>
-</table>
-</div>
-</section>
-<section class="card">
-<div class="section-title"><span class="icon">AI</span><div><h2>受限运维助手</h2><p class="muted">仅执行平台内置白名单操作，不支持任意系统命令。</p></div></div>
-<form action="/assistant" method="post" class="site-form site-entry">
-<label>操作指令<input name="message" placeholder="例如：查看平台状态、立即采集、查看最近新闻" required></label>
-<button class="accent">发送</button>
-</form>
-{% if assistant_message %}<p class="notice">{{ assistant_message }}</p>{% endif %}
-</section>
-<section class="card">
-<div class="section-title"><span class="icon">WX</span><div><h2>企业微信助手</h2><p class="muted">采用和 Telegram 一样的最小配置流程：保存、复制三项、在企业微信验证、发送指令。</p></div></div>
-<form action="/wecom/quick-settings" method="post" class="site-form site-entry">
-<label>企业 CorpID<input name="corp_id" placeholder="企业微信管理后台：我的企业 → 企业 ID"></label>
-<label>HTTPS 公网地址<input name="public_url" placeholder="例如：https://news.example.com"></label>
-<label>管理员 UserID<input name="admin_users" placeholder="通讯录中的账号；多个用英文逗号分隔"></label>
-<button class="accent">保存并生成企业微信配置</button>
-</form>
-{% if wecom_callback_url %}
-<p class="muted">第 2 步：在企业微信后台的“自建应用 → 接收消息”中粘贴以下三项并保存验证。</p>
-<div class="settings">
-<label>回调地址<input readonly value="{{ wecom_callback_url }}"></label>
-<label>Token<input readonly value="{{ wecom_callback_token_value }}"></label>
-<label>EncodingAESKey<input readonly value="{{ wecom_encoding_aes_key_value }}"></label>
-</div>
-{% endif %}
-<form action="/wecom/check" method="post" class="actions"><button>检查企业微信配置</button></form>
-<p class="muted">第 3 步：验证成功后，在企业微信中向该应用发送“状态”“立即采集”“最新新闻”或“备份”。仅已填写的管理员 UserID 可执行操作。</p>
-{% if wecom_message %}<p class="notice">{{ wecom_message }}</p>{% endif %}
-</section>
-<section class="card">
-<div class="section-title"><span class="icon">TG</span><div><h2>Telegram 机器人</h2><p class="muted">用于接收 TG 聊天指令；Token 仅加密保存在服务器端。</p></div></div>
-<p class="muted">Webhook 地址：<code>https://你的域名/telegram/callback</code></p>
-<form action="/telegram/settings" method="post" class="site-form site-entry">
-<label>Bot Token<input type="password" name="bot_token" placeholder="从 @BotFather 获取；留空则不修改"></label>
-<label>HTTPS 公网地址<input name="public_url" placeholder="例如：https://news.example.com"></label>
-<button class="accent">保存 Telegram 配置</button>
-</form>
-<form action="/telegram/webhook" method="post" class="actions"><button>配置 Telegram Webhook</button></form>
-{% if telegram_pending_user %}<p class="notice">待绑定用户：{{ telegram_pending_user.split('|', 1)[1] }}。确认是本人后点击批准。</p>{% else %}<p class="muted">配置完成后，在 TG 对机器人发送 <code>/start</code>，再回到此处点击批准即可。</p>{% endif %}
-<form action="/telegram/bind-pending" method="post" class="actions"><button class="accent">一键批准绑定</button></form>
-</section>
+  <section class="welcome" id="overview">
+    <div>
+      <span class="eyebrow">GLOBAL NEWS MONITOR</span>
+      <h1>全球新闻情报中心</h1>
+      <p>统一采集公开新闻源，自动筛选中国、科技、政治、经济、战争与重大商业新闻，并完成中文翻译和消息推送。</p>
+    </div>
+    <div class="system-state"><span></span>系统运行中<small>每日 {{ schedule }} 自动汇总</small></div>
+  </section>
+
+  <section class="stats" aria-label="平台概览">
+    <article><span>启用来源</span><strong>{{ enabled_sources }}</strong><small>共 {{ sources|length }} 个新闻源</small></article>
+    <article><span>新闻总量</span><strong>{{ total_news }}</strong><small>已去重入库</small></article>
+    <article><span>今日新增</span><strong>{{ today_news }}</strong><small>本地日期统计</small></article>
+    <article><span>关注主题</span><strong>{{ enabled_topics }}</strong><small>自动匹配关键词</small></article>
+  </section>
+
+  <section class="panel" id="news">
+    <div class="panel-head">
+      <div><span class="section-kicker">NEWS FEED</span><h2>采集结果</h2><p>按入库时间倒序展示，标题和摘要优先使用自动生成的中文翻译。</p></div>
+      <span class="count">最近 {{ items|length }} 条</span>
+    </div>
+    <div class="news-list">
+      {% for item in items %}
+      <article class="news-item">
+        <div class="news-meta"><span class="topic">{{ item.topics }}</span><span>{{ item.source }}</span><time>{{ item.published_at }}</time></div>
+        <a class="news-title" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.translated_title or item.title }}</a>
+        {% if item.translated_summary or item.summary %}<p>{{ item.translated_summary or item.summary }}</p>{% endif %}
+      </article>
+      {% else %}<div class="empty">暂时没有符合主题规则的新闻，点击“立即采集”开始。</div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="panel" id="sources">
+    <div class="panel-head">
+      <div><span class="section-kicker">SOURCE NETWORK</span><h2>国际新闻源</h2><p>添加公开且允许访问的 RSS 或 API 地址，并随时启用、停用或删除。</p></div>
+    </div>
+    <form action="/sources" method="post" class="form-grid source-form">
+      <label>来源名称<input name="name" placeholder="例如：BBC Technology" required></label>
+      <label>RSS / API 地址<input type="url" name="url" placeholder="https://example.com/rss.xml" required></label>
+      <button class="primary">添加新闻源</button>
+    </form>
+    <div class="source-grid">
+      {% for source in sources %}<article class="source-card">
+        <div><span class="source-dot {{ 'online' if source.enabled else '' }}"></span><b>{{ source.name }}</b></div>
+        <a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">{{ source.url }}</a>
+        <div class="card-actions">
+          <span class="status {{ 'success' if source.enabled else 'muted-status' }}">{{ '已启用' if source.enabled else '已停用' }}</span>
+          <form action="/sources/{{ source.id }}/toggle" method="post"><button>{{ '停用' if source.enabled else '启用' }}</button></form>
+          <form action="/sources/{{ source.id }}/delete" method="post" onsubmit="return confirm('确定删除此新闻源？')"><button class="danger">删除</button></form>
+        </div>
+      </article>{% endfor %}
+    </div>
+  </section>
+
+  <div class="split" id="automation">
+    <section class="panel">
+      <div class="panel-head compact"><div><span class="section-kicker">FILTERS</span><h2>主题与关键词</h2><p>标题或摘要命中任一关键词即可入库。</p></div></div>
+      <div class="stack">{% for topic in topics %}<form action="/topics/{{ topic.topic }}" method="post" class="topic-row">
+        <label class="check"><input type="checkbox" name="enabled" value="1" {% if topic.enabled %}checked{% endif %}><span>{{ topic.topic }}</span></label>
+        <input name="terms" value="{{ topic.terms }}" aria-label="{{ topic.topic }}关键词">
+        <button>保存</button>
+      </form>{% endfor %}</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head compact"><div><span class="section-kicker">AUTOMATION</span><h2>推送与翻译</h2><p>密钥仅保存在服务器，页面不会回显完整内容。</p></div></div>
+      <form action="/settings" method="post" class="form-stack">
+        <label>每日汇总时间<input type="time" name="schedule" value="{{ schedule }}" required></label>
+        <label>企业微信机器人 Webhook<input type="password" name="wecom_webhook" placeholder="{% if wecom_configured %}已保存；留空则不修改{% else %}https://qyapi.weixin.qq.com/…{% endif %}"></label>
+        <label>翻译模式<select name="translation_mode"><option value="argos" {% if translation_mode == 'argos' %}selected{% endif %}>本地 LibreTranslate / Argos（免费）</option><option value="off" {% if translation_mode == 'off' %}selected{% endif %}>保留原文</option></select></label>
+        <button class="primary">保存自动化设置</button>
+      </form>
+      <form action="/wecom/test" method="post" class="inline-action"><button>发送企业微信测试消息</button></form>
+      {% if wecom_message %}<p class="notice">{{ wecom_message }}</p>{% endif %}
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head"><div><span class="section-kicker">ACTIVITY</span><h2>最近运行</h2><p>采集、翻译与推送的执行结果都会保留在这里。</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>开始时间</th><th>状态</th><th>命中 / 新增</th><th>说明</th></tr></thead><tbody>
+      {% for run in runs %}<tr><td>{{ run.started_at }}</td><td><span class="status {{ run.status }}">{{ run.status }}</span></td><td>{{ run.collected_count }} / {{ run.new_count }}</td><td>{{ run.message }}</td></tr>
+      {% else %}<tr><td colspan="4" class="empty">尚无运行记录。</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+
+  <section id="assistants" class="assistant-grid">
+    <article class="panel assistant-card">
+      <div class="panel-head compact"><div><span class="section-kicker">OPS ASSISTANT</span><h2>受限运维助手</h2><p>仅执行内置白名单操作，不支持任意系统命令。</p></div></div>
+      <form action="/assistant" method="post" class="form-stack"><label>操作指令<input name="message" placeholder="查看平台状态、立即采集、查看最新新闻" required></label><button class="primary">发送指令</button></form>
+      {% if assistant_message %}<p class="notice">{{ assistant_message }}</p>{% endif %}
+    </article>
+
+    <article class="panel assistant-card">
+      <div class="panel-head compact"><div><span class="section-kicker">WECOM</span><h2>企业微信助手</h2><p>保存三项配置，在企业微信验证后即可发送聊天指令。</p></div></div>
+      <form action="/wecom/quick-settings" method="post" class="form-stack"><label>企业 CorpID<input name="corp_id" placeholder="企业微信管理后台中的企业 ID"></label><label>HTTPS 公网地址<input name="public_url" placeholder="https://news.example.com"></label><label>管理员 UserID<input name="admin_users" placeholder="多个账号用英文逗号分隔"></label><button class="primary">保存并生成配置</button></form>
+      {% if wecom_callback_url %}<details><summary>查看企业微信回调配置</summary><div class="form-stack read-only"><label>回调地址<input readonly value="{{ wecom_callback_url }}"></label><label>Token<input readonly value="{{ wecom_callback_token_value }}"></label><label>EncodingAESKey<input readonly value="{{ wecom_encoding_aes_key_value }}"></label></div></details>{% endif %}
+      <form action="/wecom/check" method="post" class="inline-action"><button>检查企业微信配置</button></form>
+    </article>
+
+    <article class="panel assistant-card">
+      <div class="panel-head compact"><div><span class="section-kicker">TELEGRAM</span><h2>Telegram 机器人</h2><p>保存 Token 后配置 Webhook，再在机器人中发送 /start。</p></div></div>
+      <form action="/telegram/settings" method="post" class="form-stack"><label>Bot Token<input type="password" name="bot_token" placeholder="从 @BotFather 获取；留空则不修改"></label><label>HTTPS 公网地址<input name="public_url" placeholder="https://news.example.com"></label><button class="primary">保存 Telegram 配置</button></form>
+      <form action="/telegram/webhook" method="post" class="inline-action"><button>配置 Telegram Webhook</button></form>
+      {% if telegram_pending_user %}<p class="notice">待绑定用户：{{ telegram_pending_user.split('|', 1)[1] }}。确认是本人后批准。</p>{% else %}<p class="helper">暂无待绑定用户，请先向机器人发送 <code>/start</code>。</p>{% endif %}
+      <form action="/telegram/bind-pending" method="post" class="inline-action"><button>一键批准绑定</button></form>
+    </article>
+  </section>
 </main>
 <footer>仅采集公开且允许访问的新闻源 · 不绕过登录、付费墙或访问控制</footer>
 </body>
