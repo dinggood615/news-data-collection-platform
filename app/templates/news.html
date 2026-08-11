@@ -59,7 +59,7 @@
     <form action="/sources" method="post" class="form-grid source-form">
       <label>来源名称<input name="name" placeholder="例如：BBC Technology" required></label>
       <label>RSS / API 地址<input type="url" name="url" placeholder="https://example.com/rss.xml" required></label>
-      <label>资讯专栏<select name="column_name"><option>全球要闻</option><option>全球金融</option><option>宏观与央行</option><option>股票与公司</option><option>债券与外汇</option><option>商品与能源</option><option>监管与披露</option><option>亚洲市场</option></select></label>
+      <label>资讯专栏<select name="column_name"><option>全球要闻</option><option>全球金融</option><option>宏观与央行</option><option>股票与公司</option><option>债券与外汇</option><option>商品与能源</option><option>监管与披露</option><option>亚洲市场</option><option>交易所公告</option><option>SEC公司观察</option></select></label>
       <label>来源等级<select name="source_tier"><option value="1">T1 官方/监管</option><option value="2" selected>T2 主流媒体</option><option value="3">T3 补充来源</option></select></label>
       <button class="primary">添加新闻源</button>
     </form>
@@ -73,6 +73,19 @@
           <form action="/sources/{{ source.id }}/delete" method="post" onsubmit="return confirm('确定删除此新闻源？')"><button class="danger">删除</button></form>
         </div>
       </article>{% endfor %}
+    </div>
+  </section>
+
+  <section class="panel" id="sec-watchlist">
+    <div class="panel-head"><div><span class="section-kicker">SEC EDGAR WATCHLIST</span><h2>SEC 公司观察名单</h2><p>只按 CIK 查询所选公司的官方 EDGAR 最新申报，不扫描 SEC 全站。支持 8-K、10-K、10-Q、6-K、20-F 等表单。</p></div></div>
+    <form action="/sec-watchlist" method="post" class="form-grid source-form">
+      <label>公司名称<input name="company_name" placeholder="例如：Apple Inc." required></label>
+      <label>CIK<input name="cik" inputmode="numeric" pattern="[0-9 ]{1,10}" placeholder="例如：0000320193" required></label>
+      <label>关注表单<input name="forms" value="8-K,10-K,10-Q,6-K,20-F" required></label>
+      <button class="primary">添加公司</button>
+    </form>
+    <div class="source-grid">
+      {% for company in sec_watchlist %}<article class="source-card"><div><span class="source-dot {{ 'online' if company.enabled else '' }}"></span><b>{{ company.company_name }}</b></div><small>CIK {{ company.cik }} · {{ company.forms }}</small><div class="card-actions"><span class="status {{ 'success' if company.enabled else 'muted-status' }}">{{ '已启用' if company.enabled else '已停用' }}</span><form action="/sec-watchlist/{{ company.cik }}/toggle" method="post"><button>{{ '停用' if company.enabled else '启用' }}</button></form><form action="/sec-watchlist/{{ company.cik }}/delete" method="post" onsubmit="return confirm('确定删除此 SEC 观察公司？')"><button class="danger">删除</button></form></div></article>{% else %}<div class="empty">尚未添加公司。CIK 可在 SEC EDGAR 公司页查询。</div>{% endfor %}
     </div>
   </section>
 
@@ -100,6 +113,7 @@
         <label>日报 HTTPS 公网地址<input type="url" name="digest_public_url" value="{{ digest_public_url }}" placeholder="https://news.example.com" required><span class="field-help">企业微信只发送一条汇总；点击该地址生成的随机只读链接查看全部新闻，无需登录后台。</span></label>
         <div class="topic-add"><label>日报链接有效天数<input type="number" name="digest_retention_days" value="{{ digest_retention_days }}" min="1" max="30" required></label><label>消息中显示头条数<input type="number" name="digest_headline_count" value="{{ digest_headline_count }}" min="1" max="10" required></label></div>
         <div class="topic-add"><label>最低金融影响分<input type="number" name="finance_min_score" value="{{ finance_min_score }}" min="0" max="100" required><span class="field-help">建议 35；越低召回越多，噪声也越多。</span></label><label>每轮模型复核上限<input type="number" name="model_max_items" value="{{ model_max_items }}" min="0" max="30" required></label></div>
+        <label>SEC User-Agent<input name="sec_user_agent" value="{{ sec_user_agent }}" placeholder="你的平台名称 your-email@example.com"><span class="field-help">SEC 要求自动访问可识别。添加观察公司前，请填写平台名称和有效联系邮箱。</span></label>
         <label class="check"><input type="checkbox" name="local_model_enabled" value="1" {% if local_model_enabled %}checked{% endif %}><span>启用本地模型复核与中文金融摘要（按需启动）</span></label>
         <label>翻译模式<select name="translation_mode"><option value="argos" {% if translation_mode == 'argos' %}selected{% endif %}>本地 LibreTranslate / Argos（免费）</option><option value="off" {% if translation_mode == 'off' %}selected{% endif %}>保留原文</option></select></label>
         <button class="primary">保存单条汇总推送设置</button>
