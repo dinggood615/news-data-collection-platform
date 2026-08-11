@@ -12,7 +12,9 @@ SEC_FORMS = {"8-K", "10-K", "10-Q", "6-K", "20-F", "40-F", "S-1", "F-1", "DEF 14
 
 
 def _json(url: str, user_agent: str) -> dict:
-    request = Request(url, headers={"User-Agent": user_agent, "Accept": "application/json", "Accept-Encoding": "gzip, deflate"})
+    # Let urllib negotiate an uncompressed response. Some official APIs return
+    # gzip when explicitly requested, while urllib does not auto-decompress it.
+    request = Request(url, headers={"User-Agent": user_agent, "Accept": "application/json"})
     with urlopen(request, timeout=30) as response:
         return json.loads(response.read().decode())
 
