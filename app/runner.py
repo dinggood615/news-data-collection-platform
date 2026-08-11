@@ -12,6 +12,7 @@ from langdetect import DetectorFactory, LangDetectException, detect
 
 from .database import connect, create_digest_report, now_text, setting
 from .intelligence import classify, enrich_with_local_model, local_model_session
+from .connectors.official import collect_hkma, collect_imf, collect_sec
 
 DetectorFactory.seed = 0
 
@@ -152,12 +153,19 @@ def collect_news() -> tuple[int, int, str]:
     with connect() as db:
         sources = [dict(row) for row in db.execute("SELECT * FROM news_sources WHERE enabled=1")]
         rules = [dict(row) for row in db.execute("SELECT * FROM topic_terms WHERE enabled=1")]
+        sec_watchlist = [dict(row) for row in db.execute("SELECT * FROM sec_watchlist WHERE enabled=1")]
     collected, warnings, accepted = 0, [], []
     for source in sources:
         try:
-            parsed = feedparser.parse(source["url"], agent="NewsCollectionPlatform/1.0 (+public RSS)")
-            if parsed.bozo and not parsed.entries: raise RuntimeError("RSS 无法解析")
-            for entry in parsed.entries[:60]:
+            if source.get("source_kind") == "hkma_api":
+                entries = collect_hkma(source["url"])
+            elif source.get("source_kind") == "imf_html":
+                entries = collect_imf(source["url"])
+            else:
+                parsed = feedparser.parse(source["url"], agent="NewsCollectionPlatform/1.0 (+public RSS)")
+                if parsed.bozo and not parsed.entries: raise RuntimeError("RSS 无法解析")
+                entries = parsed.entries
+            for entry in entries[:60]:
                 title, summary, url = _plain(entry.get("title", "")), _plain(entry.get("summary", "")), entry.get("link", "")
                 if not title or not url: continue
                 topics = _topics(title, summary, rules)
@@ -167,6 +175,12 @@ def collect_news() -> tuple[int, int, str]:
                 accepted.append({"source": source["name"], "title": title, "summary": summary, "url": url,
                                  "published_at": entry.get("published", entry.get("updated", "")), "topics": topics or [intel["column_name"]], **intel})
         except Exception as exc: warnings.append(f"{source['name']}：{type(exc).__name__}")
+    sec_items, sec_warnings = collect_sec(sec_watchlist, setting("sec_user_agent", ""))
+    warnings.extend(sec_warnings)
+    for item in sec_items:
+        intel = classify(item["title"], item["summary"], 1, item["column_name"])
+        accepted.append({**item, **intel, "column_name": item["column_name"]})
+        collected += 1
     candidates = sorted((item for item in accepted if int(setting("model_min_score", "35")) <= item["impact_score"] <= int(setting("model_max_score", "74"))), key=lambda row: row["impact_score"], reverse=True)[:max(0, min(int(setting("model_max_items", "12")), 30))]
     if setting("local_model_enabled", "1") == "1" and candidates:
         endpoint = setting("local_model_endpoint", "http://127.0.0.1:8082")

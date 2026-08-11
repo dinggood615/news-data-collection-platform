@@ -60,6 +60,7 @@ def context() -> dict:
     with connect() as db:
         sources = db.execute("SELECT * FROM news_sources ORDER BY id").fetchall()
         topics = db.execute("SELECT * FROM topic_terms ORDER BY topic").fetchall()
+        sec_watchlist = db.execute("SELECT * FROM sec_watchlist ORDER BY company_name").fetchall()
         items = db.execute("SELECT * FROM news_items ORDER BY first_seen_at DESC LIMIT 80").fetchall()
         runs = db.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 10").fetchall()
         total_news = db.execute("SELECT COUNT(*) FROM news_items").fetchone()[0]
@@ -68,6 +69,7 @@ def context() -> dict:
         ).fetchone()[0]
         return {"sources": sources,
                 "topics": topics,
+                "sec_watchlist": sec_watchlist,
                 "items": items,
                 "runs": runs,
                 "enabled_sources": sum(1 for source in sources if source["enabled"]),
@@ -83,6 +85,7 @@ def context() -> dict:
                 "finance_min_score": setting("finance_min_score", "35"),
                 "local_model_enabled": setting("local_model_enabled", "1") == "1",
                 "model_max_items": setting("model_max_items", "12"),
+                "sec_user_agent": setting("sec_user_agent", ""),
                 "wecom_message": setting("wecom_message"),
                 "wecom_app_configured": all((setting("wecom_corp_id", secret=True), setting("wecom_callback_token", secret=True),
                                              setting("wecom_encoding_aes_key", secret=True), setting("wecom_public_url", ""),
@@ -255,6 +258,30 @@ def delete_source(source_id: int):
     with connect() as db: db.execute("DELETE FROM news_sources WHERE id=?", (source_id,))
     return RedirectResponse("/", 303)
 
+
+@app.post("/sec-watchlist")
+def add_sec_company(company_name: str = Form(...), cik: str = Form(...), forms: str = Form("8-K,10-K,10-Q,6-K,20-F")):
+    normalized_cik = re.sub(r"\D", "", cik).zfill(10)
+    normalized_forms = ",".join(dict.fromkeys(part.strip().upper() for part in forms.split(",") if part.strip()))[:120]
+    if company_name.strip() and len(normalized_cik) == 10:
+        with connect() as db:
+            db.execute("""INSERT INTO sec_watchlist(cik,company_name,forms,created_at) VALUES(?,?,?,?)
+              ON CONFLICT(cik) DO UPDATE SET company_name=excluded.company_name,forms=excluded.forms""",
+                       (normalized_cik, company_name.strip()[:80], normalized_forms or "8-K,10-K,10-Q,6-K,20-F", now_text()))
+    return RedirectResponse("/#sec-watchlist", 303)
+
+
+@app.post("/sec-watchlist/{cik}/toggle")
+def toggle_sec_company(cik: str):
+    with connect() as db: db.execute("UPDATE sec_watchlist SET enabled=1-enabled WHERE cik=?", (cik,))
+    return RedirectResponse("/#sec-watchlist", 303)
+
+
+@app.post("/sec-watchlist/{cik}/delete")
+def delete_sec_company(cik: str):
+    with connect() as db: db.execute("DELETE FROM sec_watchlist WHERE cik=?", (cik,))
+    return RedirectResponse("/#sec-watchlist", 303)
+
 @app.post("/topics/{topic}")
 def save_topic(topic: str, terms: str = Form(...), enabled: str = Form("0")):
     normalized_terms = _normalize_terms(terms)
@@ -294,7 +321,8 @@ def delete_topic(topic: str):
 @app.post("/settings")
 def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), translation_mode: str = Form("argos"),
                   digest_public_url: str = Form(""), digest_retention_days: int = Form(7), digest_headline_count: int = Form(5),
-                  finance_min_score: int = Form(35), local_model_enabled: str = Form("0"), model_max_items: int = Form(12)):
+                  finance_min_score: int = Form(35), local_model_enabled: str = Form("0"), model_max_items: int = Form(12),
+                  sec_user_agent: str = Form("")):
     digest_url = digest_public_url.strip().rstrip("/")
     parsed_digest = urlparse(digest_url) if digest_url else None
     if not parsed_digest or parsed_digest.scheme != "https" or not parsed_digest.netloc or parsed_digest.path not in {"", "/"}:
@@ -307,6 +335,7 @@ def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), tran
     set_setting("finance_min_score", str(max(0, min(finance_min_score, 100))))
     set_setting("local_model_enabled", "1" if local_model_enabled == "1" else "0")
     set_setting("model_max_items", str(max(0, min(model_max_items, 30))))
+    if sec_user_agent.strip(): set_setting("sec_user_agent", sec_user_agent.strip()[:160])
     if wecom_webhook.strip():
         parsed = urlparse(wecom_webhook.strip())
         valid_webhook = (parsed.scheme == "https" and parsed.netloc == "qyapi.weixin.qq.com"

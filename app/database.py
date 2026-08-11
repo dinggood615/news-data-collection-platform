@@ -65,6 +65,17 @@ FINANCIAL_SOURCES = (
     ("BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml", "全球金融", 2, "media"),
     ("DW Business", "https://rss.dw.com/rdf/rss-en-bus", "全球金融", 2, "media"),
     ("CNA Business", "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6936", "亚洲市场", 2, "media"),
+    ("英国央行新闻", "https://www.bankofengland.co.uk/rss/news", "宏观与央行", 1, "central_bank"),
+    ("英国央行演讲", "https://www.bankofengland.co.uk/rss/speeches", "宏观与央行", 1, "central_bank"),
+    ("日本央行更新", "https://www.boj.or.jp/en/rss/whatsnew.xml", "亚洲市场", 1, "central_bank"),
+    ("日本央行统计", "https://www.boj.or.jp/en/rss/statistics.xml", "亚洲市场", 1, "central_bank"),
+    ("韩国央行货币政策", "https://www.bok.or.kr/eng/bbs/E0000627/news.rss?menuNo=400022", "亚洲市场", 1, "central_bank"),
+    ("韩国央行新闻", "https://www.bok.or.kr/eng/bbs/E0000634/news.rss?menuNo=400069", "亚洲市场", 1, "central_bank"),
+    ("香港金管局新闻 API", "https://api.hkma.gov.hk/public/press-releases?lang=en", "亚洲市场", 1, "hkma_api"),
+    ("港交所监管通讯", "https://www.hkex.com.hk/Services/RSS-Feeds/regulatory-announcements?sc_lang=en", "交易所公告", 1, "exchange"),
+    ("Nasdaq Europe 主板公告", "https://api.news.eu.nasdaq.com/news/rss/mainMarketNotices", "交易所公告", 1, "exchange"),
+    ("Nasdaq Europe First North 公告", "https://api.news.eu.nasdaq.com/news/rss/firstNorthNotices", "交易所公告", 1, "exchange"),
+    ("国际货币基金组织新闻", "https://www.imf.org/en/News", "宏观与央行", 1, "imf_html"),
 )
 
 DEFAULT_TERMS = {
@@ -108,6 +119,10 @@ def init_db() -> None:
           token_hash TEXT PRIMARY KEY, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
           item_fingerprints TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS sec_watchlist (
+          cik TEXT PRIMARY KEY, company_name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+          forms TEXT NOT NULL DEFAULT '8-K,10-K,10-Q,6-K,20-F', created_at TEXT NOT NULL
+        );
         CREATE INDEX IF NOT EXISTS idx_digest_reports_expires ON digest_reports(expires_at);
         """)
         _ensure_columns(db, "news_sources", {"column_name": "TEXT NOT NULL DEFAULT '全球要闻'", "source_tier": "INTEGER NOT NULL DEFAULT 2", "source_kind": "TEXT NOT NULL DEFAULT 'media'"})
@@ -142,6 +157,7 @@ def init_db() -> None:
                            ("local_model_endpoint", "http://127.0.0.1:8082"), ("local_model_name", "qwen3-1.7b"),
                            ("model_min_score", "35"), ("model_max_score", "74"), ("model_max_items", "12")):
             db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (key, value))
+        db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('sec_user_agent',?)", (os.getenv("SEC_USER_AGENT", ""),))
 
 
 def _ensure_columns(db: sqlite3.Connection, table: str, columns: dict[str, str]) -> None:
