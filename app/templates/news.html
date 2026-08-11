@@ -44,9 +44,9 @@
     <div class="news-list">
       {% for item in items %}
       <article class="news-item">
-        <div class="news-meta"><span class="topic">{{ item.topics }}</span><span>{{ item.source }}</span><time>{{ item.published_at }}</time></div>
+        <div class="news-meta"><span class="topic">{{ item.column_name }}</span><span>影响 {{ item.impact_level }} · {{ item.impact_score }}</span><span>{{ item.source }}</span><time>{{ item.published_at }}</time></div>
         <a class="news-title" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.translated_title or item.title }}</a>
-        {% if item.translated_summary or item.summary %}<p>{{ item.translated_summary or item.summary }}</p>{% endif %}
+        {% if item.translated_summary or item.summary %}<p>{{ item.translated_summary or item.summary }}</p>{% endif %}{% if item.impact_reason %}<small>{{ item.impact_reason }}</small>{% endif %}
       </article>
       {% else %}<div class="empty">暂时没有符合主题规则的新闻，点击“立即采集”开始。</div>{% endfor %}
     </div>
@@ -59,11 +59,13 @@
     <form action="/sources" method="post" class="form-grid source-form">
       <label>来源名称<input name="name" placeholder="例如：BBC Technology" required></label>
       <label>RSS / API 地址<input type="url" name="url" placeholder="https://example.com/rss.xml" required></label>
+      <label>资讯专栏<select name="column_name"><option>全球要闻</option><option>全球金融</option><option>宏观与央行</option><option>股票与公司</option><option>债券与外汇</option><option>商品与能源</option><option>监管与披露</option><option>亚洲市场</option></select></label>
+      <label>来源等级<select name="source_tier"><option value="1">T1 官方/监管</option><option value="2" selected>T2 主流媒体</option><option value="3">T3 补充来源</option></select></label>
       <button class="primary">添加新闻源</button>
     </form>
     <div class="source-grid">
       {% for source in sources %}<article class="source-card">
-        <div><span class="source-dot {{ 'online' if source.enabled else '' }}"></span><b>{{ source.name }}</b></div>
+        <div><span class="source-dot {{ 'online' if source.enabled else '' }}"></span><b>{{ source.name }}</b> <small>{{ source.column_name }} · T{{ source.source_tier }}</small></div>
         <a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">{{ source.url }}</a>
         <div class="card-actions">
           <span class="status {{ 'success' if source.enabled else 'muted-status' }}">{{ '已启用' if source.enabled else '已停用' }}</span>
@@ -97,6 +99,8 @@
         <label>企业微信机器人 Webhook<input type="password" name="wecom_webhook" placeholder="{% if wecom_configured %}已保存；留空则不修改{% else %}https://qyapi.weixin.qq.com/…{% endif %}"></label>
         <label>日报 HTTPS 公网地址<input type="url" name="digest_public_url" value="{{ digest_public_url }}" placeholder="https://news.example.com" required><span class="field-help">企业微信只发送一条汇总；点击该地址生成的随机只读链接查看全部新闻，无需登录后台。</span></label>
         <div class="topic-add"><label>日报链接有效天数<input type="number" name="digest_retention_days" value="{{ digest_retention_days }}" min="1" max="30" required></label><label>消息中显示头条数<input type="number" name="digest_headline_count" value="{{ digest_headline_count }}" min="1" max="10" required></label></div>
+        <div class="topic-add"><label>最低金融影响分<input type="number" name="finance_min_score" value="{{ finance_min_score }}" min="0" max="100" required><span class="field-help">建议 35；越低召回越多，噪声也越多。</span></label><label>每轮模型复核上限<input type="number" name="model_max_items" value="{{ model_max_items }}" min="0" max="30" required></label></div>
+        <label class="check"><input type="checkbox" name="local_model_enabled" value="1" {% if local_model_enabled %}checked{% endif %}><span>启用本地模型复核与中文金融摘要（按需启动）</span></label>
         <label>翻译模式<select name="translation_mode"><option value="argos" {% if translation_mode == 'argos' %}selected{% endif %}>本地 LibreTranslate / Argos（免费）</option><option value="off" {% if translation_mode == 'off' %}selected{% endif %}>保留原文</option></select></label>
         <button class="primary">保存单条汇总推送设置</button>
       </form>
@@ -136,6 +140,6 @@
     </article>
   </section>
 </main>
-<footer>仅采集公开且允许访问的新闻源 · 不绕过登录、付费墙或访问控制</footer>
+<footer>仅采集公开且允许访问的新闻源 · AI 摘要与影响评分仅供研究，不构成投资建议 · 请核验原始来源</footer>
 </body>
 </html>
