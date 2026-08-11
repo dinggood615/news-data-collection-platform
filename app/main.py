@@ -80,6 +80,9 @@ def context() -> dict:
                 "digest_public_url": setting("digest_public_url"),
                 "digest_retention_days": setting("digest_retention_days", "7"),
                 "digest_headline_count": setting("digest_headline_count", "5"),
+                "finance_min_score": setting("finance_min_score", "35"),
+                "local_model_enabled": setting("local_model_enabled", "1") == "1",
+                "model_max_items": setting("model_max_items", "12"),
                 "wecom_message": setting("wecom_message"),
                 "wecom_app_configured": all((setting("wecom_corp_id", secret=True), setting("wecom_callback_token", secret=True),
                                              setting("wecom_encoding_aes_key", secret=True), setting("wecom_public_url", ""),
@@ -107,11 +110,13 @@ def public_digest(request: Request, token: str):
     if not report:
         return templates.TemplateResponse(request, "digest.html", {"expired": True, "items": [], "topics": {}}, status_code=404)
     topics: dict[str, int] = {}
+    columns: dict[str, list[dict]] = {}
     for item in items:
+        columns.setdefault(item.get("column_name") or "全球要闻", []).append(item)
         for topic in item["topics"].split(","):
             if topic.strip():
                 topics[topic.strip()] = topics.get(topic.strip(), 0) + 1
-    return templates.TemplateResponse(request, "digest.html", {"expired": False, "report": report, "items": items, "topics": topics})
+    return templates.TemplateResponse(request, "digest.html", {"expired": False, "report": report, "items": items, "topics": topics, "columns": columns})
 
 @app.get("/healthz")
 def healthz():
@@ -235,9 +240,9 @@ async def receive_wecom_message(request: Request):
         return PlainTextResponse("invalid callback", 403)
 
 @app.post("/sources")
-def add_source(name: str = Form(...), url: str = Form(...)):
+def add_source(name: str = Form(...), url: str = Form(...), column_name: str = Form("全球要闻"), source_tier: int = Form(2)):
     if name.strip() and url.startswith(("https://", "http://")):
-        with connect() as db: db.execute("INSERT OR IGNORE INTO news_sources(name,url,created_at) VALUES(?,?,?)", (name.strip()[:80], url.strip(), now_text()))
+        with connect() as db: db.execute("INSERT OR IGNORE INTO news_sources(name,url,created_at,column_name,source_tier) VALUES(?,?,?,?,?)", (name.strip()[:80], url.strip(), now_text(), column_name.strip()[:30] or "全球要闻", max(1, min(source_tier, 3))))
     return RedirectResponse("/", 303)
 
 @app.post("/sources/{source_id}/toggle")
@@ -288,7 +293,8 @@ def delete_topic(topic: str):
 
 @app.post("/settings")
 def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), translation_mode: str = Form("argos"),
-                  digest_public_url: str = Form(""), digest_retention_days: int = Form(7), digest_headline_count: int = Form(5)):
+                  digest_public_url: str = Form(""), digest_retention_days: int = Form(7), digest_headline_count: int = Form(5),
+                  finance_min_score: int = Form(35), local_model_enabled: str = Form("0"), model_max_items: int = Form(12)):
     digest_url = digest_public_url.strip().rstrip("/")
     parsed_digest = urlparse(digest_url) if digest_url else None
     if not parsed_digest or parsed_digest.scheme != "https" or not parsed_digest.netloc or parsed_digest.path not in {"", "/"}:
@@ -298,6 +304,9 @@ def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), tran
     set_setting("digest_public_url", digest_url)
     set_setting("digest_retention_days", str(max(1, min(digest_retention_days, 30))))
     set_setting("digest_headline_count", str(max(1, min(digest_headline_count, 10))))
+    set_setting("finance_min_score", str(max(0, min(finance_min_score, 100))))
+    set_setting("local_model_enabled", "1" if local_model_enabled == "1" else "0")
+    set_setting("model_max_items", str(max(0, min(model_max_items, 30))))
     if wecom_webhook.strip():
         parsed = urlparse(wecom_webhook.strip())
         valid_webhook = (parsed.scheme == "https" and parsed.netloc == "qyapi.weixin.qq.com"

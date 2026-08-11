@@ -56,6 +56,17 @@ DEFAULT_SOURCES = (
     ("The Japan Times", "https://www.japantimes.co.jp/feed/"),
 )
 
+FINANCIAL_SOURCES = (
+    ("美联储新闻", "https://www.federalreserve.gov/feeds/press_all.xml", "宏观与央行", 1, "central_bank"),
+    ("美联储货币政策", "https://www.federalreserve.gov/feeds/press_monetary.xml", "宏观与央行", 1, "central_bank"),
+    ("欧洲央行新闻", "https://www.ecb.europa.eu/rss/press.html", "宏观与央行", 1, "central_bank"),
+    ("国际清算银行", "https://www.bis.org/doclist/rss_all_categories.rss", "宏观与央行", 1, "institution"),
+    ("国际清算银行统计", "https://www.bis.org/doclist/all_statistics.rss", "债券与外汇", 1, "institution"),
+    ("BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml", "全球金融", 2, "media"),
+    ("DW Business", "https://rss.dw.com/rdf/rss-en-bus", "全球金融", 2, "media"),
+    ("CNA Business", "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6936", "亚洲市场", 2, "media"),
+)
+
 DEFAULT_TERMS = {
     "中国": "china,chinese,beijing,prc,taiwan,香港,hong kong",
     "科技": "technology,tech,ai,artificial intelligence,semiconductor,chip,cyber,digital",
@@ -71,7 +82,9 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS news_sources (
           id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE,
-          enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+          enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
+          column_name TEXT NOT NULL DEFAULT '全球要闻', source_tier INTEGER NOT NULL DEFAULT 2,
+          source_kind TEXT NOT NULL DEFAULT 'media'
         );
         CREATE TABLE IF NOT EXISTS topic_terms (
           topic TEXT PRIMARY KEY, terms TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1
@@ -80,7 +93,11 @@ def init_db() -> None:
           fingerprint TEXT PRIMARY KEY, source TEXT NOT NULL, title TEXT NOT NULL,
           translated_title TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '',
           translated_summary TEXT NOT NULL DEFAULT '', url TEXT NOT NULL, published_at TEXT NOT NULL,
-          topics TEXT NOT NULL, priority INTEGER NOT NULL DEFAULT 0, first_seen_at TEXT NOT NULL
+          topics TEXT NOT NULL, priority INTEGER NOT NULL DEFAULT 0, first_seen_at TEXT NOT NULL,
+          column_name TEXT NOT NULL DEFAULT '全球要闻', entities TEXT NOT NULL DEFAULT '',
+          event_type TEXT NOT NULL DEFAULT '', impact_score INTEGER NOT NULL DEFAULT 0,
+          impact_level TEXT NOT NULL DEFAULT '低', impact_reason TEXT NOT NULL DEFAULT '',
+          model_summary TEXT NOT NULL DEFAULT '', model_status TEXT NOT NULL DEFAULT 'rules'
         );
         CREATE TABLE IF NOT EXISTS runs (
           id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL, finished_at TEXT,
@@ -93,8 +110,14 @@ def init_db() -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_digest_reports_expires ON digest_reports(expires_at);
         """)
+        _ensure_columns(db, "news_sources", {"column_name": "TEXT NOT NULL DEFAULT '全球要闻'", "source_tier": "INTEGER NOT NULL DEFAULT 2", "source_kind": "TEXT NOT NULL DEFAULT 'media'"})
+        _ensure_columns(db, "news_items", {"column_name": "TEXT NOT NULL DEFAULT '全球要闻'", "entities": "TEXT NOT NULL DEFAULT ''", "event_type": "TEXT NOT NULL DEFAULT ''", "impact_score": "INTEGER NOT NULL DEFAULT 0", "impact_level": "TEXT NOT NULL DEFAULT '低'", "impact_reason": "TEXT NOT NULL DEFAULT ''", "model_summary": "TEXT NOT NULL DEFAULT ''", "model_status": "TEXT NOT NULL DEFAULT 'rules'"})
         for name, url in DEFAULT_SOURCES:
             db.execute("INSERT OR IGNORE INTO news_sources(name,url,created_at) VALUES(?,?,?)", (name, url, now_text()))
+        for name, url, column, tier, kind in FINANCIAL_SOURCES:
+            db.execute("""INSERT INTO news_sources(name,url,created_at,column_name,source_tier,source_kind) VALUES(?,?,?,?,?,?)
+              ON CONFLICT(url) DO UPDATE SET column_name=excluded.column_name,source_tier=excluded.source_tier,source_kind=excluded.source_kind""",
+                       (name, url, now_text(), column, tier, kind))
         for topic, terms in DEFAULT_TERMS.items():
             db.execute("INSERT OR IGNORE INTO topic_terms(topic,terms) VALUES(?,?)", (topic, terms))
         for key, value, secret in (("admin_username", os.getenv("ADMIN_USERNAME", "admin"), False), ("schedule", "08:00", False),
@@ -115,6 +138,17 @@ def init_db() -> None:
         for key, value in (("digest_public_url", os.getenv("DIGEST_PUBLIC_URL", "")),
                            ("digest_retention_days", "7"), ("digest_headline_count", "5")):
             db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (key, value))
+        for key, value in (("finance_enabled", "1"), ("finance_min_score", "35"), ("local_model_enabled", "1"),
+                           ("local_model_endpoint", "http://127.0.0.1:8082"), ("local_model_name", "qwen3-1.7b"),
+                           ("model_min_score", "35"), ("model_max_score", "74"), ("model_max_items", "12")):
+            db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (key, value))
+
+
+def _ensure_columns(db: sqlite3.Connection, table: str, columns: dict[str, str]) -> None:
+    existing = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+    for name, definition in columns.items():
+        if name not in existing:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
 
 def create_digest_report(fingerprints: list[str], retention_days: int) -> str:

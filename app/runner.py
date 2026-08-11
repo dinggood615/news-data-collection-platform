@@ -11,6 +11,7 @@ import feedparser
 from langdetect import DetectorFactory, LangDetectException, detect
 
 from .database import connect, create_digest_report, now_text, setting
+from .intelligence import classify, enrich_with_local_model, local_model_session
 
 DetectorFactory.seed = 0
 
@@ -99,13 +100,18 @@ def _wecom_markdown(items: list[dict], report_url: str) -> str:
             if topic.strip():
                 topic_counts[topic.strip()] = topic_counts.get(topic.strip(), 0) + 1
     count_text = " · ".join(f"{topic}{count}" for topic, count in sorted(topic_counts.items(), key=lambda pair: pair[1], reverse=True))
-    sections = [f"# 国际新闻日报 · {datetime.now().astimezone():%Y-%m-%d %H:%M}", f"> 本次新增 **{len(items)}** 条  {count_text}"]
+    column_counts: dict[str, int] = {}
+    for item in items:
+        column = item.get("column_name", "全球要闻")
+        column_counts[column] = column_counts.get(column, 0) + 1
+    columns = " · ".join(f"{name}{count}" for name, count in sorted(column_counts.items(), key=lambda pair: pair[1], reverse=True))
+    sections = [f"# 全球金融情报日报 · {datetime.now().astimezone():%Y-%m-%d %H:%M}", f"> 本次新增 **{len(items)}** 条  {columns or count_text}"]
     headline_count = max(1, min(int(setting("digest_headline_count", "5")), 10))
     for index, item in enumerate(sorted(items, key=lambda row: row.get("priority", 0), reverse=True)[:headline_count], 1):
         topics = _topic_text(item["topics"])
         title = item["translated_title"] or item["title"]
-        sections.append(f"**{index}. 【{topics}】{title[:90]}**\n> {item['source']}")
-    sections.append(f"[查看全部 {len(items)} 条新闻（免登录）]({report_url})")
+        sections.append(f"**{index}. 【{item.get('column_name') or topics}｜影响{item.get('impact_level', '待评估')}】{title[:90]}**\n> {item['source']}")
+    sections.append(f"[查看全部 {len(items)} 条分栏资讯（免登录）]({report_url})\n> AI 摘要仅供研究，不构成投资建议；请核验原始来源。")
     return "\n\n".join(sections)
 
 
@@ -155,20 +161,30 @@ def collect_news() -> tuple[int, int, str]:
                 title, summary, url = _plain(entry.get("title", "")), _plain(entry.get("summary", "")), entry.get("link", "")
                 if not title or not url: continue
                 topics = _topics(title, summary, rules)
-                if not topics: continue
+                intel = classify(title, summary, int(source.get("source_tier", 2)), source.get("column_name", "全球要闻"))
+                if not topics and intel["impact_score"] < int(setting("finance_min_score", "35")): continue
                 collected += 1
                 accepted.append({"source": source["name"], "title": title, "summary": summary, "url": url,
-                                 "published_at": entry.get("published", entry.get("updated", "")), "topics": topics})
+                                 "published_at": entry.get("published", entry.get("updated", "")), "topics": topics or [intel["column_name"]], **intel})
         except Exception as exc: warnings.append(f"{source['name']}：{type(exc).__name__}")
+    candidates = sorted((item for item in accepted if int(setting("model_min_score", "35")) <= item["impact_score"] <= int(setting("model_max_score", "74"))), key=lambda row: row["impact_score"], reverse=True)[:max(0, min(int(setting("model_max_items", "12")), 30))]
+    if setting("local_model_enabled", "1") == "1" and candidates:
+        endpoint = setting("local_model_endpoint", "http://127.0.0.1:8082")
+        with local_model_session(endpoint):
+            for item in candidates:
+                try: enrich_with_local_model(item, endpoint, setting("local_model_name", "qwen3-1.7b"))
+                except Exception: item["model_status"] = "fallback"
+    accepted = [item for item in accepted if item.get("model_status") != "rejected"]
     new_items = []
     with connect() as db:
         for item in accepted:
             fingerprint = hashlib.sha256(item["url"].encode()).hexdigest()
-            cursor = db.execute("""INSERT OR IGNORE INTO news_items(fingerprint,source,title,translated_title,summary,translated_summary,url,published_at,topics,priority,first_seen_at)
-              VALUES(?,?,?,?,?,?,?,?,?,?,?)""", (fingerprint, item["source"], item["title"], "", item["summary"], "", item["url"], item["published_at"], ",".join(item["topics"]), len(item["topics"]), now_text()))
+            cursor = db.execute("""INSERT OR IGNORE INTO news_items(fingerprint,source,title,translated_title,summary,translated_summary,url,published_at,topics,priority,first_seen_at,column_name,entities,event_type,impact_score,impact_level,impact_reason,model_summary,model_status)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (fingerprint, item["source"], item["title"], "", item["summary"], "", item["url"], item["published_at"], ",".join(item["topics"]), item["impact_score"], now_text(), item["column_name"], item["entities"], item["event_type"], item["impact_score"], item["impact_level"], item["impact_reason"], item["model_summary"], item["model_status"]))
             if cursor.rowcount:
                 translated_title, translated_summary = translate(item["title"]), translate(item["summary"])
-                db.execute("""UPDATE news_items SET translated_title=?,translated_summary=? WHERE fingerprint=?""", (translated_title, translated_summary, fingerprint))
-                item.update(fingerprint=fingerprint, priority=len(item["topics"]), translated_title=translated_title, translated_summary=translated_summary); new_items.append(item)
+                final_summary = item["model_summary"] or translated_summary
+                db.execute("""UPDATE news_items SET translated_title=?,translated_summary=? WHERE fingerprint=?""", (translated_title, final_summary, fingerprint))
+                item.update(fingerprint=fingerprint, priority=item["impact_score"], translated_title=translated_title, translated_summary=final_summary); new_items.append(item)
     message = send_wecom(new_items)
     return collected, len(new_items), "; ".join(warnings + [message])
