@@ -154,9 +154,10 @@ def init_db() -> None:
                            ("digest_retention_days", "7"), ("digest_headline_count", "5")):
             db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (key, value))
         for key, value in (("finance_enabled", "1"), ("finance_min_score", "35"), ("local_model_enabled", "1"),
-                           ("local_model_endpoint", "http://127.0.0.1:8082"), ("local_model_name", "qwen3-1.7b"),
+                           ("local_model_endpoint", "http://127.0.0.1:8083"), ("local_model_name", "qwen3-1.7b"),
                            ("model_min_score", "35"), ("model_max_score", "74"), ("model_max_items", "12")):
             db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (key, value))
+        db.execute("UPDATE settings SET value='http://127.0.0.1:8083' WHERE key='local_model_endpoint' AND value IN ('http://127.0.0.1:8081','http://127.0.0.1:8082')")
         db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('sec_user_agent',?)", (os.getenv("SEC_USER_AGENT", ""),))
 
 
