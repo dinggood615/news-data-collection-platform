@@ -151,6 +151,7 @@ def init_db() -> None:
                 stored = "enc:" + _cipher().encrypt(value.encode()).decode() if secret and value else value
                 db.execute("INSERT INTO settings(key,value) VALUES(?,?)", (key, stored))
         for key, value in (("digest_public_url", os.getenv("DIGEST_PUBLIC_URL", "")),
+                           ("digest_proxy_url", os.getenv("DIGEST_PROXY_URL", "")),
                            ("digest_retention_days", "7"), ("digest_headline_count", "5")):
             db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (key, value))
         for key, value in (("finance_enabled", "1"), ("finance_min_score", "35"), ("local_model_enabled", "1"),

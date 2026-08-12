@@ -119,7 +119,8 @@ def _wecom_markdown(items: list[dict], report_url: str) -> str:
 def send_wecom(items: list[dict]) -> str:
     webhook = setting("wecom_webhook", secret=True)
     if not webhook or not items: return "企业微信未配置或没有新增新闻"
-    public_url = (setting("digest_public_url") or setting("wecom_public_url") or setting("telegram_public_url")).rstrip("/")
+    public_url = (setting("digest_proxy_url") or setting("digest_public_url")
+                  or setting("wecom_public_url") or setting("telegram_public_url")).rstrip("/")
     if not public_url.startswith("https://"):
         return "企业微信未推送：请先填写日报 HTTPS 公网地址"
     retention = max(1, min(int(setting("digest_retention_days", "7")), 30))
