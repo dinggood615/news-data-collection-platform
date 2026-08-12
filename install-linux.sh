@@ -18,15 +18,15 @@ die() { echo "错误：$*" >&2; exit 1; }
 install_packages() {
   if command -v apt-get >/dev/null; then
     apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates git python3 python3-venv python3-pip build-essential openssl curl nginx
+    DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates git python3 python3-venv python3-pip build-essential openssl curl sudo nginx
   elif command -v dnf >/dev/null; then
-    dnf install -y ca-certificates git python3 python3-pip gcc gcc-c++ make openssl curl nginx
+    dnf install -y ca-certificates git python3 python3-pip gcc gcc-c++ make openssl curl sudo nginx
   elif command -v yum >/dev/null; then
-    yum install -y ca-certificates git python3 python3-pip gcc gcc-c++ make openssl curl nginx
+    yum install -y ca-certificates git python3 python3-pip gcc gcc-c++ make openssl curl sudo nginx
   elif command -v zypper >/dev/null; then
-    zypper --non-interactive install ca-certificates git python3 python3-pip gcc gcc-c++ make openssl curl nginx
+    zypper --non-interactive install ca-certificates git python3 python3-pip gcc gcc-c++ make openssl curl sudo nginx
   elif command -v pacman >/dev/null; then
-    pacman -Sy --noconfirm ca-certificates git python python-pip base-devel openssl curl nginx
+    pacman -Sy --noconfirm ca-certificates git python python-pip base-devel openssl curl sudo nginx
   else
     die "未识别的软件包管理器。支持 apt、dnf、yum、zypper、pacman。"
   fi
@@ -75,6 +75,7 @@ if [ ! -f "$INSTALL_DIR/.env" ]; then
 fi
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$INSTALL_DIR/data"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
+bash "$INSTALL_DIR/scripts/install-local-model.sh" || echo "警告：共享本地模型部署失败，新闻平台将自动使用规则模式。"
 # Initialize SQLite before the authenticated web endpoint is exposed.  This
 # prevents a first-request race from creating an empty database file.
 su -s /bin/bash "$SERVICE_USER" -c "set -a; source '$INSTALL_DIR/.env'; set +a; cd '$INSTALL_DIR'; .venv/bin/python -c 'from app.database import init_db; init_db()'"

@@ -62,7 +62,7 @@ SEC 观察名单使用官方 `https://data.sec.gov/submissions/CIK##########.jso
 
 交易所公告当前接入港交所官方监管通讯、Nasdaq Europe Main Market 与 First North 公告。伦交所已停止公开 RNS RSS，且部分交易所数据要求授权，因此不会通过隐藏接口或绕过许可采集；有合法数据许可时可在“国际新闻源”添加对应 RSS/API。
 
-本地模型接口默认采用 llama.cpp 的 OpenAI 兼容地址 `http://127.0.0.1:8082/v1/chat/completions`。Linux 环境可将 `LLAMA_SERVER` 和 `FINANCE_MODEL_PATH` 指向本机二进制与 GGUF 文件；平台会在有候选项时按需启动，任务结束后关闭进程。未安装模型时仍可完整使用规则筛选。
+本地模型接口默认采用共享调度器的 OpenAI 兼容地址 `http://127.0.0.1:8083/v1/chat/completions`。一键 Linux 安装会部署 llama.cpp、Qwen3 0.6B/1.7B 与仅监听本机的共享调度器；如果国网平台已经安装相同模型，则直接复用且不会重复下载。调度器统一排队、互斥切换模型、缓存相同请求并在空闲后卸载，避免多个采集平台争抢端口和内存。可用 `INSTALL_LOCAL_MODELS=0` 跳过约 1.8 GB 模型下载；模型不可用时仍可完整使用规则筛选。
 
 “全球重要金融网站”指经过筛选、允许公开聚合的官方源和 RSS/API，不代表互联网全部金融网站。Bloomberg、Reuters 等付费或限制自动访问的内容不会绕过付费墙；管理员可在页面继续添加有权使用的 RSS/API。
 

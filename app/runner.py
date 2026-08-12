@@ -183,7 +183,7 @@ def collect_news() -> tuple[int, int, str]:
         collected += 1
     candidates = sorted((item for item in accepted if int(setting("model_min_score", "35")) <= item["impact_score"] <= int(setting("model_max_score", "74"))), key=lambda row: row["impact_score"], reverse=True)[:max(0, min(int(setting("model_max_items", "12")), 30))]
     if setting("local_model_enabled", "1") == "1" and candidates:
-        endpoint = setting("local_model_endpoint", "http://127.0.0.1:8082")
+        endpoint = setting("local_model_endpoint", "http://127.0.0.1:8083")
         with local_model_session(endpoint):
             for item in candidates:
                 try: enrich_with_local_model(item, endpoint, setting("local_model_name", "qwen3-1.7b"))
