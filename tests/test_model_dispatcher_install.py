@@ -11,6 +11,7 @@ def test_news_installer_contains_standalone_dispatcher():
     model_installer = (ROOT / "scripts" / "install-local-model.sh").read_text(encoding="utf-8")
     main_installer = (ROOT / "install-linux.sh").read_text(encoding="utf-8")
     assert "local-model-dispatcher.service" in model_installer
+    assert "existing_dispatcher_user" in model_installer
     assert "scripts/install-local-model.sh" in main_installer
     assert "127.0.0.1" in dispatcher
 
