@@ -80,6 +80,7 @@ def context() -> dict:
                 "wecom_configured": bool(setting("wecom_webhook", secret=True)),
                 "translation_mode": setting("translation_mode", "argos"),
                 "digest_public_url": setting("digest_public_url"),
+                "digest_proxy_url": setting("digest_proxy_url"),
                 "digest_retention_days": setting("digest_retention_days", "7"),
                 "digest_headline_count": setting("digest_headline_count", "5"),
                 "finance_min_score": setting("finance_min_score", "35"),
@@ -320,16 +321,24 @@ def delete_topic(topic: str):
 
 @app.post("/settings")
 def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), translation_mode: str = Form("argos"),
-                  digest_public_url: str = Form(""), digest_retention_days: int = Form(7), digest_headline_count: int = Form(5),
+                  digest_public_url: str = Form(""), digest_proxy_url: str = Form(""),
+                  digest_retention_days: int = Form(7), digest_headline_count: int = Form(5),
                   finance_min_score: int = Form(35), local_model_enabled: str = Form("0"), model_max_items: int = Form(12),
                   sec_user_agent: str = Form("")):
     digest_url = digest_public_url.strip().rstrip("/")
+    proxy_url = digest_proxy_url.strip().rstrip("/")
     parsed_digest = urlparse(digest_url) if digest_url else None
     if not parsed_digest or parsed_digest.scheme != "https" or not parsed_digest.netloc or parsed_digest.path not in {"", "/"}:
         set_setting("wecom_message", "日报公网地址必须是 HTTPS 根地址，例如 https://news.example.com。")
         return RedirectResponse("/#automation", 303)
+    parsed_proxy = urlparse(proxy_url) if proxy_url else None
+    if proxy_url and (parsed_proxy.scheme != "https" or not parsed_proxy.hostname
+                      or parsed_proxy.path not in {"", "/"} or parsed_proxy.query or parsed_proxy.fragment):
+        set_setting("wecom_message", "国内反代地址必须是 HTTPS 根地址，可以包含端口，例如 https://news.example.com:8443。")
+        return RedirectResponse("/#automation", 303)
     set_setting("schedule", schedule); set_setting("translation_mode", translation_mode)
     set_setting("digest_public_url", digest_url)
+    set_setting("digest_proxy_url", proxy_url)
     set_setting("digest_retention_days", str(max(1, min(digest_retention_days, 30))))
     set_setting("digest_headline_count", str(max(1, min(digest_headline_count, 10))))
     set_setting("finance_min_score", str(max(0, min(finance_min_score, 100))))
@@ -346,6 +355,13 @@ def save_settings(schedule: str = Form(...), wecom_webhook: str = Form(""), tran
         set_setting("wecom_webhook", wecom_webhook.strip(), secret=True)
         set_setting("wecom_message", "企业微信 Webhook 已保存，可点击下方按钮发送测试消息。")
     reschedule(); return RedirectResponse("/", 303)
+
+
+@app.post("/settings/digest-proxy/clear")
+def clear_digest_proxy():
+    set_setting("digest_proxy_url", "")
+    set_setting("wecom_message", "国内反代地址已清除，日报链接已恢复使用 VPS2 默认域名。")
+    return RedirectResponse("/#automation", 303)
 
 
 @app.post("/wecom/test")

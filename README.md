@@ -51,6 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/dinggood615/news-data-collection-pl
 2. 在“主题与关键词”维护中国、科技、政治、经济、战争的匹配规则。
 3. 在“企业微信与翻译”填写企业微信机器人 Webhook，并设定每日汇总时间。
 4. 填写与平台相同的 HTTPS 根地址（例如 `https://news.example.com`），设置日报链接有效天数和消息头条数量。
+5. 如果国内通过 Nginx 的 `8443` 端口反代访问，可在页面填写“国内反代访问地址”，例如 `https://cn-news.example.com:8443`。日报推送会优先使用该地址；留空或点击“一键清除反代地址”后，自动恢复使用 VPS2 默认日报地址。
 4. 本地免费翻译服务默认地址为 `http://127.0.0.1:5000/translate`；配置 LibreTranslate 后会自动使用。未配置时保留原文。
 5. 点击“立即采集”执行首次测试。
 

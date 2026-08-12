@@ -44,3 +44,29 @@ def test_wecom_sends_exactly_one_request_for_many_items(monkeypatch, tmp_path):
     request_body = opener.call_args.args[0].data.decode("utf-8")
     assert "/digest/" in request_body
     assert "30" in request_body
+
+
+def test_wecom_prefers_proxy_url_with_port(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "news.sqlite3"))
+    init_db()
+    set_setting("wecom_webhook", "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test", secret=True)
+    set_setting("digest_public_url", "https://vps2.example.com")
+    set_setting("digest_proxy_url", "https://china.example.com:8443")
+    item = _insert_news("proxy-link")
+    response = type("Response", (), {"read": lambda self: b'{"errcode":0}', "__enter__": lambda self: self, "__exit__": lambda *args: None})()
+    with patch("app.runner.urlopen", return_value=response) as opener:
+        send_wecom([item])
+    request_body = opener.call_args.args[0].data.decode("utf-8")
+    assert "https://china.example.com:8443/digest/" in request_body
+    assert "vps2.example.com" not in request_body
+
+
+def test_clear_proxy_url_restores_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "news.sqlite3"))
+    init_db()
+    set_setting("digest_proxy_url", "https://china.example.com:8443")
+    with TestClient(app) as client:
+        response = client.post("/settings/digest-proxy/clear", auth=("admin", "admin"), follow_redirects=False)
+    assert response.status_code == 303
+    with connect() as db:
+        assert db.execute("SELECT value FROM settings WHERE key='digest_proxy_url'").fetchone()[0] == ""

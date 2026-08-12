@@ -110,7 +110,8 @@
       <form action="/settings" method="post" class="form-stack">
         <label>每日汇总时间<input type="time" name="schedule" value="{{ schedule }}" required></label>
         <label>企业微信机器人 Webhook<input type="password" name="wecom_webhook" placeholder="{% if wecom_configured %}已保存；留空则不修改{% else %}https://qyapi.weixin.qq.com/…{% endif %}"></label>
-        <label>日报 HTTPS 公网地址<input type="url" name="digest_public_url" value="{{ digest_public_url }}" placeholder="https://news.example.com" required><span class="field-help">企业微信只发送一条汇总；点击该地址生成的随机只读链接查看全部新闻，无需登录后台。</span></label>
+        <label>VPS2 默认日报地址<input type="url" name="digest_public_url" value="{{ digest_public_url }}" placeholder="https://news.example.com" required><span class="field-help">反代地址留空时，推送的分栏资讯链接使用此域名。</span></label>
+        <label>国内反代访问地址（可带端口）<input type="url" name="digest_proxy_url" value="{{ digest_proxy_url }}" placeholder="https://proxy.example.com:8443"><span class="field-help">填写后，日报推送链接优先使用此地址；只填写 HTTPS 根地址，不要添加路径。</span></label>
         <div class="topic-add"><label>日报链接有效天数<input type="number" name="digest_retention_days" value="{{ digest_retention_days }}" min="1" max="30" required></label><label>消息中显示头条数<input type="number" name="digest_headline_count" value="{{ digest_headline_count }}" min="1" max="10" required></label></div>
         <div class="topic-add"><label>最低金融影响分<input type="number" name="finance_min_score" value="{{ finance_min_score }}" min="0" max="100" required><span class="field-help">建议 35；越低召回越多，噪声也越多。</span></label><label>每轮模型复核上限<input type="number" name="model_max_items" value="{{ model_max_items }}" min="0" max="30" required></label></div>
         <label>SEC User-Agent<input name="sec_user_agent" value="{{ sec_user_agent }}" placeholder="你的平台名称 your-email@example.com"><span class="field-help">SEC 要求自动访问可识别。添加观察公司前，请填写平台名称和有效联系邮箱。</span></label>
@@ -118,6 +119,7 @@
         <label>翻译模式<select name="translation_mode"><option value="argos" {% if translation_mode == 'argos' %}selected{% endif %}>本地 LibreTranslate / Argos（免费）</option><option value="off" {% if translation_mode == 'off' %}selected{% endif %}>保留原文</option></select></label>
         <button class="primary">保存单条汇总推送设置</button>
       </form>
+      <form action="/settings/digest-proxy/clear" method="post" class="inline-action" onsubmit="return confirm('清除国内反代地址并恢复使用 VPS2 默认域名？')"><button class="danger">一键清除反代地址</button></form>
       <form action="/wecom/test" method="post" class="inline-action"><button>发送企业微信测试消息</button></form>
       {% if wecom_message %}<p class="notice">{{ wecom_message }}</p>{% endif %}
     </section>

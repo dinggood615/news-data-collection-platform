@@ -71,6 +71,7 @@ python3 -m venv "$INSTALL_DIR/.venv"
 if [ ! -f "$INSTALL_DIR/.env" ]; then
   cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
   sed -i "s|APP_SECRET=.*|APP_SECRET=$(openssl rand -hex 32)|;s|ADMIN_USERNAME=.*|ADMIN_USERNAME=admin|;s|ADMIN_PASSWORD=.*|ADMIN_PASSWORD=admin|;s|DATABASE_PATH=.*|DATABASE_PATH=$INSTALL_DIR/data/news.sqlite3|" "$INSTALL_DIR/.env"
+  if [ -n "$DOMAIN" ]; then sed -i "s|DIGEST_PUBLIC_URL=.*|DIGEST_PUBLIC_URL=https://$DOMAIN|" "$INSTALL_DIR/.env"; fi
   chmod 600 "$INSTALL_DIR/.env"
 fi
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$INSTALL_DIR/data"
